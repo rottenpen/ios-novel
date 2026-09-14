@@ -1,0 +1,328 @@
+// !$*UTF8*$!
+{
+	archiveVersion = 1;
+	classes = {
+	};
+	objectVersion = 56;
+	objects = {
+
+/* Begin PBXBuildFile section */
+		8C16BF1674B957718816918E /* BookDetailView.swift in Sources */ = {isa = PBXBuildFile; fileRef = 75110D2385D3589BAB3DA2B3 /* BookDetailView.swift */; };
+		1371C8121C3754998D2959D2 /* BookSourceView.swift in Sources */ = {isa = PBXBuildFile; fileRef = 2A048065B071522B891080B5 /* BookSourceView.swift */; };
+		ED4146994BEA59FDA52B81E3 /* BookshelfView.swift in Sources */ = {isa = PBXBuildFile; fileRef = 7712E53DE0E75B7B896C1D9D /* BookshelfView.swift */; };
+		446B0224E02A5CA5848137DB /* CommonViews.swift in Sources */ = {isa = PBXBuildFile; fileRef = 8B9998B0AD295E779A7B9179 /* CommonViews.swift */; };
+		D2DC5A6E048F5AF0952F537B /* DesignSystem.swift in Sources */ = {isa = PBXBuildFile; fileRef = 71F6D870A7235DB0A7D8967E /* DesignSystem.swift */; };
+		0BC14B879507527887272C3E /* ReaderView.swift in Sources */ = {isa = PBXBuildFile; fileRef = AB06075797EB5842A3A81E96 /* ReaderView.swift */; };
+		4A17A8DD19325500BEF633E3 /* SearchView.swift in Sources */ = {isa = PBXBuildFile; fileRef = 074B6F4E6D1B5B029EAAC202 /* SearchView.swift */; };
+		0FF6DC0AD1285A07B6B565FD /* SelfCheckView.swift in Sources */ = {isa = PBXBuildFile; fileRef = 8A354D524E745FEA80BE1304 /* SelfCheckView.swift */; };
+		F18F6B2438D15FAAA0489904 /* SourceDebugView.swift in Sources */ = {isa = PBXBuildFile; fileRef = C2691FD81A35541086C17CC2 /* SourceDebugView.swift */; };
+		9C0E4EA2A5315BEB97E1EBE5 /* TextPageView.swift in Sources */ = {isa = PBXBuildFile; fileRef = 60E92C0DD92E59C483A38328 /* TextPageView.swift */; };
+		E1977E0AA6E05D0D97CC4DFF /* YueduApp.swift in Sources */ = {isa = PBXBuildFile; fileRef = 72BD4AE232745E6FB59B211A /* YueduApp.swift */; };
+		2351AE7F910E58F39478E329 /* ReaderCore in Frameworks */ = {isa = PBXBuildFile; productRef = 0A9932D39F1A58D288F7D5BC /* ReaderCore */; };
+		C858F116F7D657E6A3B08B8D /* Assets.xcassets in Resources */ = {isa = PBXBuildFile; fileRef = BB865E0DBDB6531FB440B43B /* Assets.xcassets */; };
+		EA295CAD81F8513098D1630A /* builtin_sources.json in Resources */ = {isa = PBXBuildFile; fileRef = F63747D31CEF564A9C7B3DDB /* builtin_sources.json */; };
+/* End PBXBuildFile section */
+
+/* Begin PBXFileReference section */
+		75110D2385D3589BAB3DA2B3 /* BookDetailView.swift */ = {isa = PBXFileReference; lastKnownFileType = sourcecode.swift; path = BookDetailView.swift; sourceTree = "<group>"; };
+		2A048065B071522B891080B5 /* BookSourceView.swift */ = {isa = PBXFileReference; lastKnownFileType = sourcecode.swift; path = BookSourceView.swift; sourceTree = "<group>"; };
+		7712E53DE0E75B7B896C1D9D /* BookshelfView.swift */ = {isa = PBXFileReference; lastKnownFileType = sourcecode.swift; path = BookshelfView.swift; sourceTree = "<group>"; };
+		8B9998B0AD295E779A7B9179 /* CommonViews.swift */ = {isa = PBXFileReference; lastKnownFileType = sourcecode.swift; path = CommonViews.swift; sourceTree = "<group>"; };
+		71F6D870A7235DB0A7D8967E /* DesignSystem.swift */ = {isa = PBXFileReference; lastKnownFileType = sourcecode.swift; path = DesignSystem.swift; sourceTree = "<group>"; };
+		AB06075797EB5842A3A81E96 /* ReaderView.swift */ = {isa = PBXFileReference; lastKnownFileType = sourcecode.swift; path = ReaderView.swift; sourceTree = "<group>"; };
+		074B6F4E6D1B5B029EAAC202 /* SearchView.swift */ = {isa = PBXFileReference; lastKnownFileType = sourcecode.swift; path = SearchView.swift; sourceTree = "<group>"; };
+		8A354D524E745FEA80BE1304 /* SelfCheckView.swift */ = {isa = PBXFileReference; lastKnownFileType = sourcecode.swift; path = SelfCheckView.swift; sourceTree = "<group>"; };
+		C2691FD81A35541086C17CC2 /* SourceDebugView.swift */ = {isa = PBXFileReference; lastKnownFileType = sourcecode.swift; path = SourceDebugView.swift; sourceTree = "<group>"; };
+		60E92C0DD92E59C483A38328 /* TextPageView.swift */ = {isa = PBXFileReference; lastKnownFileType = sourcecode.swift; path = TextPageView.swift; sourceTree = "<group>"; };
+		72BD4AE232745E6FB59B211A /* YueduApp.swift */ = {isa = PBXFileReference; lastKnownFileType = sourcecode.swift; path = YueduApp.swift; sourceTree = "<group>"; };
+		606811F390FE54639761B380 /* Yuedu.app */ = {isa = PBXFileReference; explicitFileType = wrapper.application; includeInIndex = 0; path = Yuedu.app; sourceTree = BUILT_PRODUCTS_DIR; };
+		469F81859F9B562481580E55 /* Info.plist */ = {isa = PBXFileReference; lastKnownFileType = text.plist.xml; path = Info.plist; sourceTree = "<group>"; };
+		BB865E0DBDB6531FB440B43B /* Assets.xcassets */ = {isa = PBXFileReference; lastKnownFileType = folder.assetcatalog; path = Assets.xcassets; sourceTree = "<group>"; };
+		F63747D31CEF564A9C7B3DDB /* builtin_sources.json */ = {isa = PBXFileReference; lastKnownFileType = text.json; path = builtin_sources.json; sourceTree = "<group>"; };
+/* End PBXFileReference section */
+
+/* Begin PBXFrameworksBuildPhase section */
+		482407C2AC6B5E8F9673C17A /* Frameworks */ = {
+			isa = PBXFrameworksBuildPhase;
+			buildActionMask = 2147483647;
+			files = (
+				2351AE7F910E58F39478E329 /* ReaderCore in Frameworks */,
+			);
+			runOnlyForDeploymentPostprocessing = 0;
+		};
+/* End PBXFrameworksBuildPhase section */
+
+/* Begin PBXGroup section */
+		BB66FE9A4835595181907313 = {
+			isa = PBXGroup;
+			children = (
+				82A877E7D1BB55DF934B8A64 /* Yuedu */,
+				65942BB85BB85F3FA400116E /* Products */,
+			);
+			sourceTree = "<group>";
+		};
+		65942BB85BB85F3FA400116E /* Products */ = {
+			isa = PBXGroup;
+			children = (
+				606811F390FE54639761B380 /* Yuedu.app */,
+			);
+			name = Products;
+			sourceTree = "<group>";
+		};
+		82A877E7D1BB55DF934B8A64 /* Yuedu */ = {
+			isa = PBXGroup;
+			children = (
+				72BD4AE232745E6FB59B211A /* YueduApp.swift */,
+				7F69CBFEF261567698D4C1EC /* Views */,
+				BB865E0DBDB6531FB440B43B /* Assets.xcassets */,
+				F63747D31CEF564A9C7B3DDB /* builtin_sources.json */,
+				469F81859F9B562481580E55 /* Info.plist */,
+			);
+			name = Yuedu;
+			path = App/Yuedu;
+			sourceTree = "<group>";
+		};
+		7F69CBFEF261567698D4C1EC /* Views */ = {
+			isa = PBXGroup;
+			children = (
+				75110D2385D3589BAB3DA2B3 /* BookDetailView.swift */,
+				2A048065B071522B891080B5 /* BookSourceView.swift */,
+				7712E53DE0E75B7B896C1D9D /* BookshelfView.swift */,
+				8B9998B0AD295E779A7B9179 /* CommonViews.swift */,
+				71F6D870A7235DB0A7D8967E /* DesignSystem.swift */,
+				AB06075797EB5842A3A81E96 /* ReaderView.swift */,
+				074B6F4E6D1B5B029EAAC202 /* SearchView.swift */,
+				8A354D524E745FEA80BE1304 /* SelfCheckView.swift */,
+				C2691FD81A35541086C17CC2 /* SourceDebugView.swift */,
+				60E92C0DD92E59C483A38328 /* TextPageView.swift */,
+			);
+			path = Views;
+			sourceTree = "<group>";
+		};
+/* End PBXGroup section */
+
+/* Begin PBXNativeTarget section */
+		ADE791A4B05C58C08913A018 /* Yuedu */ = {
+			isa = PBXNativeTarget;
+			buildConfigurationList = C2079F33D7CE5CCB932AB0E4;
+			buildPhases = (
+				69671A2643C953D6A0E309F3 /* Sources */,
+				482407C2AC6B5E8F9673C17A /* Frameworks */,
+				82817DBA9C335000B333697B /* Resources */,
+			);
+			buildRules = (
+			);
+			dependencies = (
+			);
+			name = Yuedu;
+			packageProductDependencies = (
+				0A9932D39F1A58D288F7D5BC /* ReaderCore */,
+			);
+			productName = Yuedu;
+			productReference = 606811F390FE54639761B380 /* Yuedu.app */;
+			productType = "com.apple.product-type.application";
+		};
+/* End PBXNativeTarget section */
+
+/* Begin PBXProject section */
+		16BC6F07E49B50188C51A112 /* Project object */ = {
+			isa = PBXProject;
+			attributes = {
+				BuildIndependentTargetsInParallel = 1;
+				LastSwiftUpdateCheck = 1600;
+				LastUpgradeCheck = 1600;
+				TargetAttributes = {
+					ADE791A4B05C58C08913A018 = {
+						CreatedOnToolsVersion = 16.0;
+					};
+				};
+			};
+			buildConfigurationList = 469DA5F61FAA5AC5B0F4A32A;
+			compatibilityVersion = "Xcode 14.0";
+			developmentRegion = en;
+			hasScannedForEncodings = 0;
+			knownRegions = (
+				en,
+				Base,
+				"zh-Hans",
+			);
+			mainGroup = BB66FE9A4835595181907313;
+			packageReferences = (
+				775F3FC478FF55DFB2E5CB20 /* XCLocalSwiftPackageReference "ReaderCore" */,
+			);
+			productRefGroup = 65942BB85BB85F3FA400116E /* Products */;
+			projectDirPath = "";
+			projectRoot = "";
+			targets = (
+				ADE791A4B05C58C08913A018 /* Yuedu */,
+			);
+		};
+/* End PBXProject section */
+
+/* Begin PBXResourcesBuildPhase section */
+		82817DBA9C335000B333697B /* Resources */ = {
+			isa = PBXResourcesBuildPhase;
+			buildActionMask = 2147483647;
+			files = (
+				C858F116F7D657E6A3B08B8D /* Assets.xcassets in Resources */,
+				EA295CAD81F8513098D1630A /* builtin_sources.json in Resources */,
+			);
+			runOnlyForDeploymentPostprocessing = 0;
+		};
+/* End PBXResourcesBuildPhase section */
+
+/* Begin PBXSourcesBuildPhase section */
+		69671A2643C953D6A0E309F3 /* Sources */ = {
+			isa = PBXSourcesBuildPhase;
+			buildActionMask = 2147483647;
+			files = (
+				8C16BF1674B957718816918E /* BookDetailView.swift in Sources */,
+				1371C8121C3754998D2959D2 /* BookSourceView.swift in Sources */,
+				ED4146994BEA59FDA52B81E3 /* BookshelfView.swift in Sources */,
+				446B0224E02A5CA5848137DB /* CommonViews.swift in Sources */,
+				D2DC5A6E048F5AF0952F537B /* DesignSystem.swift in Sources */,
+				0BC14B879507527887272C3E /* ReaderView.swift in Sources */,
+				4A17A8DD19325500BEF633E3 /* SearchView.swift in Sources */,
+				0FF6DC0AD1285A07B6B565FD /* SelfCheckView.swift in Sources */,
+				F18F6B2438D15FAAA0489904 /* SourceDebugView.swift in Sources */,
+				9C0E4EA2A5315BEB97E1EBE5 /* TextPageView.swift in Sources */,
+				E1977E0AA6E05D0D97CC4DFF /* YueduApp.swift in Sources */,
+			);
+			runOnlyForDeploymentPostprocessing = 0;
+		};
+/* End PBXSourcesBuildPhase section */
+
+/* Begin XCBuildConfiguration section */
+		14FCA4D8449351B8802A43E8 /* Debug */ = {
+			isa = XCBuildConfiguration;
+			buildSettings = {
+				ALWAYS_SEARCH_USER_PATHS = NO;
+				CLANG_ENABLE_MODULES = YES;
+				CLANG_ENABLE_OBJC_ARC = YES;
+				COPY_PHASE_STRIP = NO;
+				DEBUG_INFORMATION_FORMAT = dwarf;
+				ENABLE_STRICT_OBJC_MSGSEND = YES;
+				ENABLE_TESTABILITY = YES;
+				GCC_OPTIMIZATION_LEVEL = 0;
+				GCC_PREPROCESSOR_DEFINITIONS = (
+					"DEBUG=1",
+					"$(inherited)",
+				);
+				IPHONEOS_DEPLOYMENT_TARGET = 17.0;
+				MTL_ENABLE_DEBUG_INFO = INCLUDE_SOURCE;
+				ONLY_ACTIVE_ARCH = YES;
+				SDKROOT = iphoneos;
+				SWIFT_ACTIVE_COMPILATION_CONDITIONS = DEBUG;
+				SWIFT_OPTIMIZATION_LEVEL = "-Onone";
+				SWIFT_VERSION = 5.0;
+			};
+			name = Debug;
+		};
+		19CF11B965B258E8945EDBB1 /* Release */ = {
+			isa = XCBuildConfiguration;
+			buildSettings = {
+				ALWAYS_SEARCH_USER_PATHS = NO;
+				CLANG_ENABLE_MODULES = YES;
+				CLANG_ENABLE_OBJC_ARC = YES;
+				COPY_PHASE_STRIP = NO;
+				DEBUG_INFORMATION_FORMAT = "dwarf-with-dsym";
+				ENABLE_NS_ASSERTIONS = NO;
+				ENABLE_STRICT_OBJC_MSGSEND = YES;
+				IPHONEOS_DEPLOYMENT_TARGET = 17.0;
+				MTL_ENABLE_DEBUG_INFO = NO;
+				SDKROOT = iphoneos;
+				SWIFT_COMPILATION_MODE = wholemodule;
+				SWIFT_VERSION = 5.0;
+				VALIDATE_PRODUCT = YES;
+			};
+			name = Release;
+		};
+		704166A2512F5544A5EA0E40 /* Debug */ = {
+			isa = XCBuildConfiguration;
+			buildSettings = {
+				ASSETCATALOG_COMPILER_APPICON_NAME = AppIcon;
+				ASSETCATALOG_COMPILER_GLOBAL_ACCENT_COLOR_NAME = AccentColor;
+				CODE_SIGN_STYLE = Automatic;
+				DEVELOPMENT_TEAM = "";
+				PRODUCT_BUNDLE_IDENTIFIER = com.yuedu.reader;
+				CURRENT_PROJECT_VERSION = 1;
+				ENABLE_PREVIEWS = YES;
+				GENERATE_INFOPLIST_FILE = NO;
+				INFOPLIST_FILE = "App/Yuedu/Info.plist";
+				IPHONEOS_DEPLOYMENT_TARGET = 17.0;
+				LD_RUNPATH_SEARCH_PATHS = (
+					"$(inherited)",
+					"@executable_path/Frameworks",
+				);
+				MARKETING_VERSION = 1.0;
+				PRODUCT_NAME = "$(TARGET_NAME)";
+				SWIFT_EMIT_LOC_STRINGS = YES;
+				SWIFT_VERSION = 5.0;
+				TARGETED_DEVICE_FAMILY = "1,2";
+			};
+			name = Debug;
+		};
+		43DF5DC1A76A53FB9AB0929E /* Release */ = {
+			isa = XCBuildConfiguration;
+			buildSettings = {
+				ASSETCATALOG_COMPILER_APPICON_NAME = AppIcon;
+				ASSETCATALOG_COMPILER_GLOBAL_ACCENT_COLOR_NAME = AccentColor;
+				CODE_SIGN_STYLE = Automatic;
+				DEVELOPMENT_TEAM = "";
+				PRODUCT_BUNDLE_IDENTIFIER = com.yuedu.reader;
+				CURRENT_PROJECT_VERSION = 1;
+				ENABLE_PREVIEWS = YES;
+				GENERATE_INFOPLIST_FILE = NO;
+				INFOPLIST_FILE = "App/Yuedu/Info.plist";
+				IPHONEOS_DEPLOYMENT_TARGET = 17.0;
+				LD_RUNPATH_SEARCH_PATHS = (
+					"$(inherited)",
+					"@executable_path/Frameworks",
+				);
+				MARKETING_VERSION = 1.0;
+				PRODUCT_NAME = "$(TARGET_NAME)";
+				SWIFT_EMIT_LOC_STRINGS = YES;
+				SWIFT_VERSION = 5.0;
+				TARGETED_DEVICE_FAMILY = "1,2";
+			};
+			name = Release;
+		};
+/* End XCBuildConfiguration section */
+
+/* Begin XCConfigurationList section */
+		469DA5F61FAA5AC5B0F4A32A = {
+			isa = XCConfigurationList;
+			buildConfigurations = (
+				14FCA4D8449351B8802A43E8 /* Debug */,
+				19CF11B965B258E8945EDBB1 /* Release */,
+			);
+			defaultConfigurationIsVisible = 0;
+			defaultConfigurationName = Release;
+		};
+		C2079F33D7CE5CCB932AB0E4 = {
+			isa = XCConfigurationList;
+			buildConfigurations = (
+				704166A2512F5544A5EA0E40 /* Debug */,
+				43DF5DC1A76A53FB9AB0929E /* Release */,
+			);
+			defaultConfigurationIsVisible = 0;
+			defaultConfigurationName = Release;
+		};
+/* End XCConfigurationList section */
+
+/* Begin XCLocalSwiftPackageReference section */
+		775F3FC478FF55DFB2E5CB20 /* XCLocalSwiftPackageReference "ReaderCore" */ = {
+			isa = XCLocalSwiftPackageReference;
+			relativePath = ReaderCore;
+		};
+/* End XCLocalSwiftPackageReference section */
+
+/* Begin XCSwiftPackageProductDependency section */
+		0A9932D39F1A58D288F7D5BC /* ReaderCore */ = {
+			isa = XCSwiftPackageProductDependency;
+			productName = ReaderCore;
+		};
+/* End XCSwiftPackageProductDependency section */
+	};
+	rootObject = 16BC6F07E49B50188C51A112 /* Project object */;
+}

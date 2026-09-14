@@ -1,0 +1,32 @@
+[
+ {
+  "bookSourceName": "速读谷(适配版)",
+  "bookSourceUrl": "https://www.sudugu.cc",
+  "bookSourceType": 0,
+  "enabled": true,
+  "enabledExplore": false,
+  "searchUrl": "/modules/article/search.php,{'method':'post','body':'searchkey={{key}}&action=login&searchtype=all&submit='}",
+  "ruleSearch": {
+   "bookList": "class.item",
+   "name": "tag.h3@tag.a@text",
+   "author": "tag.li.0@text##作者：",
+   "bookUrl": "tag.h3@tag.a@href",
+   "intro": "tag.p@text##简介：",
+   "latestChapterName": "tag.li.2@tag.a@text"
+  },
+  "ruleBookInfo": {
+   "name": "tag.h1@text",
+   "author": "class.des@tag.a.0@text##作者：",
+   "tocUrl": "class.des@tag.a.0@href"
+  },
+  "ruleToc": {
+   "chapterList": "id.list@tag.li@tag.a",
+   "chapterName": "text",
+   "chapterUrl": "href"
+  },
+  "ruleContent": {
+   "content": "class.con@textNodes",
+   "nextContentUrl": "text.下一页@href"
+  }
+ }
+]

@@ -1,0 +1,36 @@
+# 构建和依赖缓存
+/build/
+DerivedData/
+.build/
+.swiftpm/
+__pycache__/
+*.py[cod]
+*.xcresult
+*.ipa
+*.dSYM/
+*.xcarchive/
+
+# Xcode 个人状态
+xcuserdata/
+*.xcuserstate
+*.xccheckout
+*.xcscmblueprint
+
+# 本机配置与签名材料
+.env
+.env.*
+!.env.example
+*.local.xcconfig
+*.p12
+*.p8
+*.pem
+*.key
+*.cer
+*.mobileprovision
+*.provisionprofile
+
+# 系统与编辑器状态
+.DS_Store
+.idea/
+.vscode/
+*.log
