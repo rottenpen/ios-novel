@@ -67,7 +67,7 @@ Yuedu.xcodeproj/           可直接打开的 Xcode 工程
 generate_project.py       可复现的工程生成器
 ```
 
-功能要求见 [SPEC](SPEC.md)，验证结果和能力边界见 [代码审查](CODE_REVIEW.md)。
+功能要求见 [SPEC](SPEC.md)，验证结果和能力边界见 [代码审查](CODE_REVIEW.md)，数据处理方式见 [隐私说明](PRIVACY.md)。
 
 ## 许可
 
