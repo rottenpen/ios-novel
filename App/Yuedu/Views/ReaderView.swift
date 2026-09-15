@@ -26,6 +26,7 @@ struct ReadTheme: Identifiable, Hashable {
 struct ReaderView: View {
     let book: Book
     let chapters: [BookChapter]
+    let onSourceChange: (Book, [BookChapter], Int) -> Void
 
     @EnvironmentObject private var shelf: BookshelfRepository
     @EnvironmentObject private var sourceRepo: BookSourceRepository
@@ -43,14 +44,17 @@ struct ReaderView: View {
     @State private var showControls = false
     @State private var showSettings = false
     @State private var showCatalog = false
+    @State private var showSourceSwitch = false
     @State private var forward = true
 
     private var currentIndex: Int { reader.chapterIndex }
     private var theme: ReadTheme { ReadTheme.theme(for: themeId) }
 
-    init(book: Book, chapters: [BookChapter], startIndex: Int, startPosition: Int = 0) {
+    init(book: Book, chapters: [BookChapter], startIndex: Int, startPosition: Int = 0,
+         onSourceChange: @escaping (Book, [BookChapter], Int) -> Void) {
         self.book = book
         self.chapters = chapters
+        self.onSourceChange = onSourceChange
         _reader = StateObject(wrappedValue: ReadingSession(
             chapterCount: chapters.count, startIndex: startIndex, startOffset: startPosition
         ))
@@ -103,6 +107,19 @@ struct ReaderView: View {
         }
         .sheet(isPresented: $showSettings) { settingsSheet }
         .sheet(isPresented: $showCatalog) { catalogSheet }
+        .sheet(isPresented: $showSourceSwitch) {
+            SourceSwitchView(book: book, chapterTitle: chapters[safe: currentIndex]?.title ?? "",
+                             chapterIndex: currentIndex) { target, catalog, index, content in
+                reader.stop()
+                if let updated = shelf.replaceSource(bookUrl: book.bookUrl, with: target,
+                                                     chapters: catalog, chapterIndex: index, content: content) {
+                    onSourceChange(updated, catalog, index)
+                } else {
+                    reader.retry()
+                    reader.message = "换源未完成，请重新进入阅读后再试"
+                }
+            }
+        }
         .toast($reader.message)
     }
 
@@ -115,6 +132,7 @@ struct ReaderView: View {
                 VStack(spacing: 16) {
                     Text(error).font(.footnote).multilineTextAlignment(.center)
                     Button("重新加载") { reader.retry() }.buttonStyle(.bordered)
+                    Button("换源") { showSourceSwitch = true }.buttonStyle(.bordered)
                 }
             } else if let pages = reader.pagination {
                 renderedPage(pages)
@@ -199,6 +217,10 @@ struct ReaderView: View {
                     .font(.subheadline.weight(.medium))
                     .lineLimit(1)
                 Spacer()
+                Button { showSourceSwitch = true } label: {
+                    Label("换源", systemImage: "arrow.triangle.swap")
+                        .font(.subheadline)
+                }.accessibilityIdentifier("reader.changeSource")
                 Button { showCatalog = true } label: {
                     Image(systemName: "list.bullet")
                 }.accessibilityLabel("目录")

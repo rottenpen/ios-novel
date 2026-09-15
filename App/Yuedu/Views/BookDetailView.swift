@@ -68,12 +68,15 @@ struct BookDetailView: View {
         }
         .task { await loadAll(force: false) }
         .fullScreenCover(item: $readingChapter) { target in
-            ReaderView(
+            ReaderHostView(
                 book: detail,
                 chapters: chapters,
                 startIndex: target.index,
                 startPosition: target.position
-            )
+            ) { updated, catalog in
+                detail = updated
+                chapters = catalog
+            }
         }
         .toast($toast)
     }

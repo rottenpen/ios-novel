@@ -16,6 +16,7 @@
 		4A17A8DD19325500BEF633E3 /* SearchView.swift in Sources */ = {isa = PBXBuildFile; fileRef = 074B6F4E6D1B5B029EAAC202 /* SearchView.swift */; };
 		0FF6DC0AD1285A07B6B565FD /* SelfCheckView.swift in Sources */ = {isa = PBXBuildFile; fileRef = 8A354D524E745FEA80BE1304 /* SelfCheckView.swift */; };
 		F18F6B2438D15FAAA0489904 /* SourceDebugView.swift in Sources */ = {isa = PBXBuildFile; fileRef = C2691FD81A35541086C17CC2 /* SourceDebugView.swift */; };
+		E9DAE7D5655959A2836B905E /* SourceSwitchView.swift in Sources */ = {isa = PBXBuildFile; fileRef = 46AD8B51C9A957F7B85A7BFC /* SourceSwitchView.swift */; };
 		9C0E4EA2A5315BEB97E1EBE5 /* TextPageView.swift in Sources */ = {isa = PBXBuildFile; fileRef = 60E92C0DD92E59C483A38328 /* TextPageView.swift */; };
 		E1977E0AA6E05D0D97CC4DFF /* YueduApp.swift in Sources */ = {isa = PBXBuildFile; fileRef = 72BD4AE232745E6FB59B211A /* YueduApp.swift */; };
 		2351AE7F910E58F39478E329 /* ReaderCore in Frameworks */ = {isa = PBXBuildFile; productRef = 0A9932D39F1A58D288F7D5BC /* ReaderCore */; };
@@ -33,6 +34,7 @@
 		074B6F4E6D1B5B029EAAC202 /* SearchView.swift */ = {isa = PBXFileReference; lastKnownFileType = sourcecode.swift; path = SearchView.swift; sourceTree = "<group>"; };
 		8A354D524E745FEA80BE1304 /* SelfCheckView.swift */ = {isa = PBXFileReference; lastKnownFileType = sourcecode.swift; path = SelfCheckView.swift; sourceTree = "<group>"; };
 		C2691FD81A35541086C17CC2 /* SourceDebugView.swift */ = {isa = PBXFileReference; lastKnownFileType = sourcecode.swift; path = SourceDebugView.swift; sourceTree = "<group>"; };
+		46AD8B51C9A957F7B85A7BFC /* SourceSwitchView.swift */ = {isa = PBXFileReference; lastKnownFileType = sourcecode.swift; path = SourceSwitchView.swift; sourceTree = "<group>"; };
 		60E92C0DD92E59C483A38328 /* TextPageView.swift */ = {isa = PBXFileReference; lastKnownFileType = sourcecode.swift; path = TextPageView.swift; sourceTree = "<group>"; };
 		72BD4AE232745E6FB59B211A /* YueduApp.swift */ = {isa = PBXFileReference; lastKnownFileType = sourcecode.swift; path = YueduApp.swift; sourceTree = "<group>"; };
 		606811F390FE54639761B380 /* Yuedu.app */ = {isa = PBXFileReference; explicitFileType = wrapper.application; includeInIndex = 0; path = Yuedu.app; sourceTree = BUILT_PRODUCTS_DIR; };
@@ -94,6 +96,7 @@
 				074B6F4E6D1B5B029EAAC202 /* SearchView.swift */,
 				8A354D524E745FEA80BE1304 /* SelfCheckView.swift */,
 				C2691FD81A35541086C17CC2 /* SourceDebugView.swift */,
+				46AD8B51C9A957F7B85A7BFC /* SourceSwitchView.swift */,
 				60E92C0DD92E59C483A38328 /* TextPageView.swift */,
 			);
 			path = Views;
@@ -185,6 +188,7 @@
 				4A17A8DD19325500BEF633E3 /* SearchView.swift in Sources */,
 				0FF6DC0AD1285A07B6B565FD /* SelfCheckView.swift in Sources */,
 				F18F6B2438D15FAAA0489904 /* SourceDebugView.swift in Sources */,
+				E9DAE7D5655959A2836B905E /* SourceSwitchView.swift in Sources */,
 				9C0E4EA2A5315BEB97E1EBE5 /* TextPageView.swift in Sources */,
 				E1977E0AA6E05D0D97CC4DFF /* YueduApp.swift in Sources */,
 			);

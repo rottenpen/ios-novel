@@ -111,6 +111,39 @@ public final class BookshelfRepository: ObservableObject {
         books.contains { $0.book.bookUrl == bookUrl }
     }
 
+    /// 新源目录与正文验证成功后整体切换，章内偏移不能跨版本复用。
+    @discardableResult
+    public func replaceSource(bookUrl: String, with replacement: Book,
+                              chapters: [BookChapter], chapterIndex: Int, content: String) -> Book? {
+        guard chapters.indices.contains(chapterIndex), !content.trimmingCharacters(in: .whitespacesAndNewlines).isEmpty,
+              let position = books.firstIndex(where: { $0.book.bookUrl == bookUrl }) else { return nil }
+        var entry = books[position]
+        var book = replacement
+        book.customTag = entry.book.customTag
+        book.customCoverUrl = entry.book.customCoverUrl
+        book.customIntro = entry.book.customIntro
+        book.order = entry.book.order
+        book.canUpdate = entry.book.canUpdate
+        book.totalChapterNum = chapters.count
+        book.durChapterIndex = chapterIndex
+        book.durChapterTitle = chapters[chapterIndex].title
+        book.durChapterPos = 0
+        book.durChapterTime = Date().timeIntervalSince1970
+        entry.book = book
+        entry.lastKnownChapterCount = chapters.count
+        entry.lastReadAt = Date()
+        books[position] = entry
+        // 同一本新源书可能已在书架中，合并为当前正在阅读的一条。
+        books = books.enumerated().filter { $0.offset == position || $0.element.book.bookUrl != book.bookUrl }.map(\.element)
+        clearCache(for: bookUrl)
+        if bookUrl != book.bookUrl { clearCache(for: book.bookUrl) }
+        saveChapters(chapters, for: book.bookUrl)
+        saveContent(content, bookUrl: book.bookUrl, chapterIndex: chapterIndex)
+        save()
+        flush()
+        return book
+    }
+
     public func shelfBook(for bookUrl: String) -> ShelfBook? {
         books.first { $0.book.bookUrl == bookUrl }
     }
