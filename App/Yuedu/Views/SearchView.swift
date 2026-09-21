@@ -7,6 +7,10 @@ struct SearchView: View {
     @EnvironmentObject private var shelf: BookshelfRepository
     @StateObject private var model = SearchModel()
 
+    /// 来自发现页的待搜索关键词；切到本 Tab 后消费并清空。
+    /// 默认 .constant(nil) 使其他调用方（如深链）无需关心此入参。
+    var pendingKeyword: Binding<String?> = .constant(nil)
+
     @State private var input = ""
     @State private var selectedBook: Book?
     @State private var toast: String?
@@ -54,6 +58,21 @@ struct SearchView: View {
                       !q.isEmpty else { return }
                 input = q
                 startSearch(q)
+            }
+            .onChange(of: pendingKeyword.wrappedValue) { _, keyword in
+                guard let keyword, !keyword.isEmpty else { return }
+                input = keyword
+                startSearch(keyword)
+                // 消费后清空，避免返回本 Tab 时重复触发
+                pendingKeyword.wrappedValue = nil
+            }
+            .task {
+                // 首次进入时若已有待搜索词（例如发现页先于本 Tab 初始化），立即消费
+                if let keyword = pendingKeyword.wrappedValue, !keyword.isEmpty {
+                    input = keyword
+                    startSearch(keyword)
+                    pendingKeyword.wrappedValue = nil
+                }
             }
         }
     }

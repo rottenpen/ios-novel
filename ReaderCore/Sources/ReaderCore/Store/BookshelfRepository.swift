@@ -148,6 +148,36 @@ public final class BookshelfRepository: ObservableObject {
         books.first { $0.book.bookUrl == bookUrl }
     }
 
+    /// 冷启动续看的目标书。
+    ///
+    /// 只考虑 `lastReadAt` 最新的那一本：用户期望回到"上次在看的书"，
+    /// 若它的目录缓存不可用则返回 nil，由调用方留在书架，
+    /// 而不是改为打开另一本更早读过的书。
+    /// 目录取自本地缓存，续看无需等待网络。
+    public func resumeCandidate() -> ResumeTarget? {
+        let candidate = books
+            .filter { $0.lastReadAt != nil }
+            .max { ($0.lastReadAt ?? .distantPast) < ($1.lastReadAt ?? .distantPast) }
+        guard let entry = candidate else { return nil }
+        let chapters = loadChapters(for: entry.book.bookUrl)
+        guard !chapters.isEmpty else { return nil }
+        let index = max(0, min(entry.book.durChapterIndex, chapters.count - 1))
+        return ResumeTarget(
+            book: entry.book,
+            chapters: chapters,
+            chapterIndex: index,
+            position: max(0, entry.book.durChapterPos)
+        )
+    }
+
+    /// 续看目标：书、已缓存目录与上次读到的位置
+    public struct ResumeTarget: Sendable {
+        public let book: Book
+        public let chapters: [BookChapter]
+        public let chapterIndex: Int
+        public let position: Int
+    }
+
     public func add(_ book: Book) {
         guard !contains(book.bookUrl) else {
             update(book)
@@ -268,6 +298,25 @@ public final class BookshelfRepository: ObservableObject {
         )
     }
 
+    /// 已缓存正文的章节下标集合。
+    ///
+    /// 一次目录扫描得出结果，避免长目录逐章调用 `hasContent`
+    /// 造成成百上千次磁盘查询（千章级书籍每次界面重绘都会卡顿）。
+    public func cachedChapterIndexes(bookUrl: String) -> Set<Int> {
+        flush()
+        let prefix = "c_\(Self.hash(bookUrl))_"
+        let suffix = ".txt"
+        guard let items = try? FileManager.default.contentsOfDirectory(atPath: cacheDirectory.path) else {
+            return []
+        }
+        var result: Set<Int> = []
+        for name in items where name.hasPrefix(prefix) && name.hasSuffix(suffix) {
+            let middle = name.dropFirst(prefix.count).dropLast(suffix.count)
+            if let index = Int(middle) { result.insert(index) }
+        }
+        return result
+    }
+
     /// 清理指定书籍的全部缓存
     public func clearCache(for bookUrl: String) {
         let prefix = "c_\(Self.hash(bookUrl))_"
@@ -282,8 +331,11 @@ public final class BookshelfRepository: ObservableObject {
         }
     }
 
-    /// 缓存占用大小（字节）
-    public func cacheSize() -> Int64 {
+    /// 缓存占用大小（字节）。
+    ///
+    /// `nonisolated` 以便在后台线程遍历磁盘，不占用主线程；
+    /// 只读取固定的缓存目录常量，与 MainActor 状态无关，因此线程安全。
+    public nonisolated func cacheSize() -> Int64 {
         let fm = FileManager.default
         guard let items = try? fm.contentsOfDirectory(
             at: cacheDirectory, includingPropertiesForKeys: [.fileSizeKey]
@@ -292,6 +344,13 @@ public final class BookshelfRepository: ObservableObject {
             let size = (try? url.resourceValues(forKeys: [.fileSizeKey]).fileSize) ?? 0
             total += Int64(size)
         }
+    }
+
+    /// 后台计算缓存占用，避免大目录遍历卡住界面。
+    public nonisolated func cacheSizeAsync() async -> Int64 {
+        await Task.detached(priority: .utility) { [self] in
+            cacheSize()
+        }.value
     }
 
     public func clearAllCache() {

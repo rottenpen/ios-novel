@@ -7,6 +7,7 @@ struct BookDetailView: View {
 
     @EnvironmentObject private var shelf: BookshelfRepository
     @EnvironmentObject private var sourceRepo: BookSourceRepository
+    @EnvironmentObject private var downloader: DownloadManager
     @Environment(\.dismiss) private var dismiss
 
     @State private var detail: Book
@@ -18,6 +19,9 @@ struct BookDetailView: View {
     @State private var showAllChapters = false
     @State private var readingChapter: ReadingTarget?
     @State private var introExpanded = false
+    /// 已缓存章节下标快照。一次目录扫描得出，供菜单与目录区复用，
+    /// 避免千章级书籍每次界面重绘都逐章查盘；下载推进时刷新。
+    @State private var cachedSnapshot: Set<Int> = []
 
     init(book: Book) {
         self.book = book
@@ -35,6 +39,9 @@ struct BookDetailView: View {
             VStack(alignment: .leading, spacing: DS.Spacing.xl) {
                 header
                 actionButtons
+                if isDownloadingThis {
+                    downloadProgressCard
+                }
                 if let intro = detail.displayIntro, !intro.isEmpty {
                     introSection(intro)
                 }
@@ -53,7 +60,50 @@ struct BookDetailView: View {
                     } label: {
                         Label("刷新", systemImage: "arrow.clockwise")
                     }
+                    Divider()
+                    if isDownloadingThis {
+                        Button(role: .destructive) {
+                            downloader.cancel()
+                        } label: {
+                            Label("停止下载", systemImage: "stop.circle")
+                        }
+                    } else {
+                        Button {
+                            startDownload()
+                        } label: {
+                            Label(downloadTitle, systemImage: "arrow.down.circle")
+                        }
+                        .disabled(chapters.isEmpty || source == nil || downloader.isDownloading)
+                        if uncachedCount > 0, uncachedCount < chapters.count {
+                            Button {
+                                startDownload(fromCurrent: true)
+                            } label: {
+                                Label("从当前章往后下载", systemImage: "arrow.down.to.line")
+                            }
+                            .disabled(source == nil || downloader.isDownloading)
+                        }
+                    }
+                    if !downloader.failedChapters.isEmpty, !downloader.isDownloading {
+                        Button {
+                            retryFailed()
+                        } label: {
+                            Label("重试失败的 \(downloader.failedChapters.count) 章", systemImage: "arrow.clockwise.circle")
+                        }
+                        .disabled(source == nil)
+                    }
+                    if cachedCount > 0 {
+                        Button(role: .destructive) {
+                            shelf.clearCache(for: detail.bookUrl)
+                            shelf.flush()
+                            refreshCachedSnapshot()
+                            toast = "已清除本书缓存"
+                        } label: {
+                            Label("清除本书缓存", systemImage: "trash.slash")
+                        }
+                        .disabled(isDownloadingThis)
+                    }
                     if inShelf {
+                        Divider()
                         Button(role: .destructive) {
                             shelf.remove(detail.bookUrl)
                             toast = "已移出书架"
@@ -66,7 +116,22 @@ struct BookDetailView: View {
                 }
             }
         }
-        .task { await loadAll(force: false) }
+        .task {
+            await loadAll(force: false)
+            // 目录就绪后再扫一次，首次进入即可显示正确的已缓存数
+            refreshCachedSnapshot()
+        }
+        // 下载结束后的结果提示统一走详情页的 toast
+        .onChange(of: downloader.message) { _, text in
+            guard let text else { return }
+            toast = text
+            refreshCachedSnapshot()
+            downloader.message = nil
+        }
+        // 每完成一章就刷新目录里的已下载标记
+        .onChange(of: downloader.progress.completed) { _, _ in
+            refreshCachedSnapshot()
+        }
         .fullScreenCover(item: $readingChapter) { target in
             ReaderHostView(
                 book: detail,
@@ -165,6 +230,95 @@ struct BookDetailView: View {
         return "继续阅读"
     }
 
+    // MARK: - 下载
+
+    private var isDownloadingThis: Bool {
+        downloader.isDownloading(bookUrl: detail.bookUrl)
+    }
+
+    private var cachedIndexes: Set<Int> { cachedSnapshot }
+
+    /// 只统计当前目录范围内的缓存，避免换源后残留文件让计数虚高
+    private var cachedCount: Int {
+        let cached = cachedSnapshot
+        return chapters.indices.reduce(into: 0) { total, index in
+            if cached.contains(index) { total += 1 }
+        }
+    }
+
+    private var uncachedCount: Int { max(0, chapters.count - cachedCount) }
+
+    private var downloadTitle: String {
+        if chapters.isEmpty { return "下载全本" }
+        if uncachedCount == 0 { return "已全部缓存" }
+        if cachedCount > 0 { return "继续下载剩余 \(uncachedCount) 章" }
+        return "下载全本 \(chapters.count) 章"
+    }
+
+    private var downloadProgressCard: some View {
+        let progress = downloader.progress
+        return VStack(alignment: .leading, spacing: DS.Spacing.sm) {
+            HStack {
+                Label("正在下载", systemImage: "arrow.down.circle")
+                    .font(.subheadline.weight(.medium))
+                Spacer()
+                Text("\(progress.handled) / \(progress.total)")
+                    .font(.caption).monospacedDigit()
+                    .foregroundStyle(.secondary)
+            }
+            ProgressView(value: progress.fraction).tint(DS.accent)
+            HStack(spacing: DS.Spacing.md) {
+                if progress.failed > 0 {
+                    Text("失败 \(progress.failed)")
+                        .font(.caption2).foregroundStyle(.orange)
+                }
+                if progress.skipped > 0 {
+                    Text("已跳过 \(progress.skipped)")
+                        .font(.caption2).foregroundStyle(.secondary)
+                }
+                Spacer()
+                Button("停止") { downloader.cancel() }
+                    .font(.caption)
+                    .buttonStyle(.bordered)
+            }
+        }
+        .frame(maxWidth: .infinity, alignment: .leading)
+        .cardStyle()
+    }
+
+    private func refreshCachedSnapshot() {
+        cachedSnapshot = shelf.cachedChapterIndexes(bookUrl: detail.bookUrl)
+    }
+
+    private func startDownload(fromCurrent: Bool = false) {
+        guard let source else {
+            toast = "找不到对应书源，无法下载"
+            return
+        }
+        guard !chapters.isEmpty else { return }
+        // 下载会写入书架缓存目录，先确保这本书在架，避免产生孤立缓存
+        if !inShelf { toggleShelf() }
+        let range: [Int]? = fromCurrent
+            ? Array(currentChapterIndex..<chapters.count)
+            : nil
+        downloader.start(
+            book: detail, chapters: chapters, source: source,
+            shelf: shelf, range: range
+        )
+    }
+
+    private func retryFailed() {
+        guard let source else { return }
+        downloader.retryFailed(
+            book: detail, chapters: chapters, source: source, shelf: shelf
+        )
+    }
+
+    private var currentChapterIndex: Int {
+        let saved = shelf.shelfBook(for: detail.bookUrl)?.book.durChapterIndex ?? 0
+        return max(0, min(saved, max(0, chapters.count - 1)))
+    }
+
     // MARK: - 简介
 
     private func introSection(_ intro: String) -> some View {
@@ -195,6 +349,9 @@ struct BookDetailView: View {
                     Text("\(chapters.count) 章")
                         .font(.caption)
                         .foregroundStyle(.secondary)
+                    if cachedCount > 0 {
+                        Text("已缓存 \(cachedCount)").chipStyle()
+                    }
                 }
                 Spacer()
                 if isLoadingToc {
@@ -220,6 +377,8 @@ struct BookDetailView: View {
             }
 
             let preview = showAllChapters ? chapters : Array(chapters.prefix(20))
+            // 复用同一份缓存快照，整段目录只读一次
+            let cached = cachedSnapshot
             VStack(spacing: 0) {
                 ForEach(preview) { chapter in
                     Button {
@@ -236,9 +395,7 @@ struct BookDetailView: View {
                                     .font(.caption2)
                                     .foregroundStyle(.orange)
                             }
-                            if shelf.hasContent(
-                                bookUrl: detail.bookUrl, chapterIndex: chapter.index
-                            ) {
+                            if cached.contains(chapter.index) {
                                 Image(systemName: "arrow.down.circle.fill")
                                     .font(.caption2)
                                     .foregroundStyle(DS.accent.opacity(0.6))

@@ -113,6 +113,55 @@ struct SelfCheckView: View {
         } catch {
             log("正文失败：\(error.localizedDescription)", ok: false)
         }
+
+        // 5) 批量下载：走与用户完全相同的 DownloadManager 路径
+        await checkDownload(source: source, book: book, chapters: chapters)
         finished = true
+    }
+
+    /// 下载自检：取前若干章跑一遍真实下载，校验落盘、跳过与进度统计。
+    private func checkDownload(source: BookSource, book: Book, chapters: [BookChapter]) async {
+        let sampleCount = min(5, chapters.count)
+        guard sampleCount > 0 else { return }
+        let directory = FileManager.default.temporaryDirectory
+            .appendingPathComponent("selfcheck-\(UUID().uuidString)")
+        defer { try? FileManager.default.removeItem(at: directory) }
+        let shelf = BookshelfRepository(directory: directory)
+        let manager = DownloadManager()
+        let range = Array(0..<sampleCount)
+
+        log("开始下载前 \(sampleCount) 章…")
+        manager.start(book: book, chapters: chapters, source: source, shelf: shelf, range: range)
+        // 等待下载结束，最多 60 秒
+        for _ in 0..<600 {
+            if !manager.isDownloading { break }
+            try? await Task.sleep(nanoseconds: 100_000_000)
+        }
+
+        let progress = manager.progress
+        let ok = progress.completed > 0 && progress.failed == 0
+        log("下载结果：成功 \(progress.completed)，失败 \(progress.failed)", ok: ok)
+
+        // 校验确实落盘可读
+        var readable = 0
+        var totalChars = 0
+        for index in range {
+            if let text = shelf.loadContent(bookUrl: book.bookUrl, chapterIndex: index),
+               !text.trimmingCharacters(in: .whitespacesAndNewlines).isEmpty {
+                readable += 1
+                totalChars += text.count
+            }
+        }
+        log("落盘校验：\(readable)/\(sampleCount) 章可读，共 \(totalChars) 字",
+            ok: readable == sampleCount)
+
+        // 再次下载应全部跳过，验证断点续传不重复请求
+        manager.start(book: book, chapters: chapters, source: source, shelf: shelf, range: range)
+        for _ in 0..<100 {
+            if !manager.isDownloading { break }
+            try? await Task.sleep(nanoseconds: 100_000_000)
+        }
+        log("重复下载跳过：\(manager.progress.skipped)/\(sampleCount) 章",
+            ok: manager.progress.skipped == readable && readable > 0)
     }
 }

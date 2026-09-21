@@ -43,10 +43,21 @@ def collect_swift_files():
     return sorted(result)
 
 
+def collect_resource_jsons():
+    """收集 App/Yuedu 根目录下的 .json 资源（内置书源、发现页书单等），
+    随 App 打进 bundle。仅取根目录，避免误收子目录里的非资源文件。"""
+    result = []
+    for name in sorted(os.listdir(APP_DIR)):
+        if name.endswith(".json") and os.path.isfile(os.path.join(APP_DIR, name)):
+            result.append(name)
+    return result
+
+
 def main():
     swift_files = collect_swift_files()
     if not swift_files:
         raise SystemExit("App/Yuedu 中没有 Swift 文件")
+    resource_jsons = collect_resource_jsons()
 
     # ---- 分配 object id ----
     ids = {
@@ -71,9 +82,10 @@ def main():
         "info_plist": oid("info_plist"),
         "assets_ref": oid("assets_ref"),
         "assets_build": oid("assets_build"),
-        "builtin_ref": oid("builtin_ref"),
-        "builtin_build": oid("builtin_build"),
     }
+    # 每个 json 资源分配稳定 id
+    res_ref = {name: oid("res_ref/" + name) for name in resource_jsons}
+    res_build = {name: oid("res_build/" + name) for name in resource_jsons}
 
     # 文件引用：按子目录分组
     file_refs = {}       # rel_path -> file ref id
@@ -107,11 +119,12 @@ def main():
         f"\t\t{ids['assets_build']} /* Assets.xcassets in Resources */ = {{isa = PBXBuildFile; "
         f"fileRef = {ids['assets_ref']} /* Assets.xcassets */; }};"
     )
-    # 内置书源需打进 bundle，供「导入内置书源」兜底使用
-    pbx_build_files.append(
-        f"\t\t{ids['builtin_build']} /* builtin_sources.json in Resources */ = {{isa = PBXBuildFile; "
-        f"fileRef = {ids['builtin_ref']} /* builtin_sources.json */; }};"
-    )
+    # json 资源打进 bundle（内置书源、发现页书单等）
+    for name in resource_jsons:
+        pbx_build_files.append(
+            f"\t\t{res_build[name]} /* {name} in Resources */ = {{isa = PBXBuildFile; "
+            f"fileRef = {res_ref[name]} /* {name} */; }};"
+        )
 
     pbx_file_refs = []
     for rel in swift_files:
@@ -133,10 +146,11 @@ def main():
         f"\t\t{ids['assets_ref']} /* Assets.xcassets */ = {{isa = PBXFileReference; "
         f"lastKnownFileType = folder.assetcatalog; path = Assets.xcassets; sourceTree = \"<group>\"; }};"
     )
-    pbx_file_refs.append(
-        f"\t\t{ids['builtin_ref']} /* builtin_sources.json */ = {{isa = PBXFileReference; "
-        f"lastKnownFileType = text.json; path = builtin_sources.json; sourceTree = \"<group>\"; }};"
-    )
+    for name in resource_jsons:
+        pbx_file_refs.append(
+            f"\t\t{res_ref[name]} /* {name} */ = {{isa = PBXFileReference; "
+            f"lastKnownFileType = text.json; path = {name}; sourceTree = \"<group>\"; }};"
+        )
 
     # 分组children
     root_children = []
@@ -145,7 +159,8 @@ def main():
     for name in sorted(group_ids):
         root_children.append(f"\t\t\t\t{group_ids[name]} /* {name} */,")
     root_children.append(f"\t\t\t\t{ids['assets_ref']} /* Assets.xcassets */,")
-    root_children.append(f"\t\t\t\t{ids['builtin_ref']} /* builtin_sources.json */,")
+    for name in resource_jsons:
+        root_children.append(f"\t\t\t\t{res_ref[name]} /* {name} */,")
     root_children.append(f"\t\t\t\t{ids['info_plist']} /* Info.plist */,")
 
     pbx_groups = []
@@ -167,6 +182,12 @@ def main():
     sources_list = "\n".join(
         f"\t\t\t\t{build_files[rel]} /* {os.path.basename(rel)} in Sources */,"
         for rel in swift_files
+    )
+
+    # 资源构建阶段里每个 json 一行
+    res_phase_lines = "\n".join(
+        f"\t\t\t\t{res_build[name]} /* {name} in Resources */,"
+        for name in resource_jsons
     )
 
     pbxproj = f"""// !$*UTF8*$!
@@ -289,7 +310,7 @@ def main():
 			buildActionMask = 2147483647;
 			files = (
 				{ids['assets_build']} /* Assets.xcassets in Resources */,
-				{ids['builtin_build']} /* builtin_sources.json in Resources */,
+{res_phase_lines}
 			);
 			runOnlyForDeploymentPostprocessing = 0;
 		}};

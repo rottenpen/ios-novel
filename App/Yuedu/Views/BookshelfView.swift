@@ -5,12 +5,14 @@ import ReaderCore
 struct BookshelfView: View {
     @EnvironmentObject private var shelf: BookshelfRepository
     @EnvironmentObject private var sourceRepo: BookSourceRepository
+    @EnvironmentObject private var downloader: DownloadManager
 
     @AppStorage("shelf.isGrid") private var isGrid = true
     @State private var searchText = ""
     @State private var selectedBook: Book?
     @State private var toast: String?
     @State private var isRefreshing = false
+    @State private var showSettings = false
 
     private var filtered: [ShelfBook] {
         guard !searchText.isEmpty else { return shelf.books }
@@ -57,6 +59,12 @@ struct BookshelfView: View {
                             Label("检查全部更新", systemImage: "arrow.clockwise")
                         }
                         .disabled(isRefreshing || shelf.books.isEmpty)
+                        Divider()
+                        Button {
+                            showSettings = true
+                        } label: {
+                            Label("设置", systemImage: "gearshape")
+                        }
                     } label: {
                         Image(systemName: "ellipsis.circle")
                     }
@@ -65,16 +73,52 @@ struct BookshelfView: View {
             .navigationDestination(item: $selectedBook) { book in
                 BookDetailView(book: book)
             }
+            .sheet(isPresented: $showSettings) {
+                SettingsView()
+            }
             .overlay(alignment: .top) {
                 if isRefreshing {
                     ProgressView("正在检查更新…")
                         .padding(DS.Spacing.md)
                         .background(.regularMaterial, in: Capsule())
                         .padding(.top, DS.Spacing.sm)
+                } else if downloader.isDownloading {
+                    downloadBanner
                 }
+            }
+            // 下载可能在其他页面发起，结果提示统一在书架也能看到
+            .onChange(of: downloader.message) { _, text in
+                guard let text else { return }
+                toast = text
+                downloader.message = nil
             }
             .toast($toast)
         }
+    }
+
+    /// 顶部下载条：任何页面发起的下载都能在书架看到进度并停止
+    private var downloadBanner: some View {
+        let progress = downloader.progress
+        let name = downloader.activeBookUrl
+            .flatMap { shelf.shelfBook(for: $0)?.book.name } ?? "正在下载"
+        return HStack(spacing: DS.Spacing.sm) {
+            ProgressView().controlSize(.small)
+            VStack(alignment: .leading, spacing: 1) {
+                Text(name)
+                    .font(.caption.weight(.medium))
+                    .lineLimit(1)
+                Text("\(progress.handled) / \(progress.total) 章")
+                    .font(.caption2).monospacedDigit()
+                    .foregroundStyle(.secondary)
+            }
+            Button("停止") { downloader.cancel() }
+                .font(.caption)
+                .buttonStyle(.bordered)
+        }
+        .padding(.horizontal, DS.Spacing.md)
+        .padding(.vertical, DS.Spacing.sm)
+        .background(.regularMaterial, in: Capsule())
+        .padding(.top, DS.Spacing.sm)
     }
 
     // MARK: - 网格
@@ -219,6 +263,20 @@ struct BookshelfView: View {
         } label: {
             Label("查看详情", systemImage: "info.circle")
         }
+        if downloader.isDownloading(bookUrl: item.book.bookUrl) {
+            Button(role: .destructive) {
+                downloader.cancel()
+            } label: {
+                Label("停止下载", systemImage: "stop.circle")
+            }
+        } else {
+            Button {
+                startDownload(item)
+            } label: {
+                Label("下载全本", systemImage: "arrow.down.circle")
+            }
+            .disabled(downloader.isDownloading || sourceRepo.source(for: item.book.origin) == nil)
+        }
         if item.hasUpdate {
             Button {
                 shelf.markUpdateSeen(bookUrl: item.book.bookUrl)
@@ -232,6 +290,20 @@ struct BookshelfView: View {
         } label: {
             Label("移出书架", systemImage: "trash")
         }
+    }
+
+    /// 从书架直接下载：用本地目录缓存，避免再等一次目录请求
+    private func startDownload(_ item: ShelfBook) {
+        guard let source = sourceRepo.source(for: item.book.origin) else {
+            toast = "找不到对应书源"
+            return
+        }
+        let chapters = shelf.loadChapters(for: item.book.bookUrl)
+        guard !chapters.isEmpty else {
+            toast = "没有目录缓存，请先打开详情页加载目录"
+            return
+        }
+        downloader.start(book: item.book, chapters: chapters, source: source, shelf: shelf)
     }
 
     /// 批量检查更新：并发拉目录，只比较章节数

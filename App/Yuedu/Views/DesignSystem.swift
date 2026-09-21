@@ -105,9 +105,67 @@ struct CardStyle: ViewModifier {
     }
 }
 
+/// 毛玻璃质感卡片。
+///
+/// 参考「列表界面如何做出设计感」的做法：上透下实的白色渐变（玻璃通透感）
+/// + 反向渐变描边（折射厚度）+ 系统材质模糊 + 柔和外投影（与背景拉开距离）。
+struct GlassCardStyle: ViewModifier {
+    var padding: CGFloat = DS.Spacing.md
+
+    func body(content: Content) -> some View {
+        content
+            .padding(padding)
+            .background(
+                RoundedRectangle(cornerRadius: DS.Radius.lg, style: .continuous)
+                    .fill(
+                        LinearGradient(
+                            colors: [Color.white.opacity(0.9), Color.white.opacity(0.62)],
+                            startPoint: .top, endPoint: .bottom
+                        )
+                    )
+                    .background(
+                        .ultraThinMaterial,
+                        in: RoundedRectangle(cornerRadius: DS.Radius.lg, style: .continuous)
+                    )
+            )
+            .overlay(
+                RoundedRectangle(cornerRadius: DS.Radius.lg, style: .continuous)
+                    .strokeBorder(
+                        LinearGradient(
+                            colors: [Color.white.opacity(0.9), Color.white.opacity(0.15)],
+                            startPoint: .top, endPoint: .bottom
+                        ),
+                        lineWidth: 1
+                    )
+            )
+            .clipShape(RoundedRectangle(cornerRadius: DS.Radius.lg, style: .continuous))
+            .shadow(color: DS.accent.opacity(0.12), radius: 12, x: 0, y: 6)
+    }
+}
+
+/// 发现页用的清透渐变背景，衬托毛玻璃轻质感。
+struct DiscoverBackground: View {
+    var body: some View {
+        LinearGradient(
+            colors: [
+                DS.accent.opacity(0.30),
+                Color(light: .init(hex: 0xEAF1F0), dark: .init(hex: 0x0C1413)),
+                Color(light: .init(hex: 0xF6F6F8), dark: .init(hex: 0x000000))
+            ],
+            startPoint: .top, endPoint: .bottom
+        )
+        .ignoresSafeArea()
+    }
+}
+
 extension View {
     func cardStyle(padding: CGFloat = DS.Spacing.md) -> some View {
         modifier(CardStyle(padding: padding))
+    }
+
+    /// 毛玻璃卡片样式
+    func glassCardStyle(padding: CGFloat = DS.Spacing.md) -> some View {
+        modifier(GlassCardStyle(padding: padding))
     }
 
     /// 轻量胶囊标签

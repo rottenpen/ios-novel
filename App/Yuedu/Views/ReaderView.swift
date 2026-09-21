@@ -73,15 +73,25 @@ struct ReaderView: View {
                 VStack(spacing: 12) {
                     Text(chapters[safe: currentIndex]?.title ?? "正文")
                         .font(.caption).foregroundStyle(theme.text.opacity(0.6))
-                        .lineLimit(1).frame(height: 20)
+                        .lineLimit(1)
+                        .frame(height: 20)
+                        // 与正文左边缘对齐，不再居中
+                        .frame(maxWidth: .infinity, alignment: .leading)
                     page(layout: layout)
                         .frame(width: layout.width, height: layout.height)
                     HStack {
-                        Text("第 \(currentIndex + 1) / \(chapters.count) 章")
+                        // 目录位置，不写成"第 N 章"：书源目录含卷末感言等非正文条目，
+                        // 位置序号与标题里的作品章号本就不同，并列显示会被误读为错位。
+                        Text("\(currentIndex + 1) / \(chapters.count)")
                         Spacer()
                         if let pages = reader.pagination {
                             Text("\(reader.pageIndex + 1) / \(pages.ranges.count) 页")
                         }
+                    }
+                    // 时钟独立居中，不受两侧文字宽度变化影响
+                    .overlay {
+                        // 阅读时状态栏隐藏，这里补回当前时间
+                        ReaderClock()
                     }
                     .font(.caption2).monospacedDigit()
                     .foregroundStyle(theme.text.opacity(0.6)).frame(height: 16)
@@ -464,5 +474,52 @@ extension Array {
     /// 安全下标，越界返回 nil
     subscript(safe index: Int) -> Element? {
         indices.contains(index) ? self[index] : nil
+    }
+}
+
+/// 阅读页时钟：阅读时系统状态栏被隐藏，这里显示当前时间。
+///
+/// 只在跨分钟时刷新，不做每秒轮询；进入前台时立即校正，
+/// 避免后台待机后显示停在旧时间。
+struct ReaderClock: View {
+    @Environment(\.scenePhase) private var scenePhase
+    @State private var now = Date()
+
+    private static let formatter: DateFormatter = {
+        let formatter = DateFormatter()
+        // 跟随系统 12/24 小时制
+        formatter.locale = .current
+        formatter.setLocalizedDateFormatFromTemplate("j:mm")
+        return formatter
+    }()
+
+    var body: some View {
+        Text(Self.formatter.string(from: now))
+            .accessibilityLabel("当前时间 \(Self.formatter.string(from: now))")
+            .task(id: scenePhase) {
+                guard scenePhase == .active else { return }
+                now = Date()
+                // 先对齐到下一个整分钟，之后每分钟刷新一次
+                while !Task.isCancelled {
+                    let next = Self.nextMinute(after: Date())
+                    let gap = next.timeIntervalSinceNow
+                    if gap > 0 {
+                        try? await Task.sleep(nanoseconds: UInt64(gap * 1_000_000_000))
+                    }
+                    guard !Task.isCancelled else { return }
+                    now = Date()
+                }
+            }
+    }
+
+    private static func nextMinute(after date: Date) -> Date {
+        let calendar = Calendar.current
+        guard let next = calendar.nextDate(
+            after: date, matching: DateComponents(second: 0),
+            matchingPolicy: .nextTime
+        ) else {
+            return date.addingTimeInterval(60)
+        }
+        return next
     }
 }
