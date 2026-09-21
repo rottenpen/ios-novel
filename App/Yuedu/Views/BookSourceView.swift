@@ -41,7 +41,7 @@ struct BookSourceView: View {
                     sourceList
                 }
             }
-            .background(DS.canvas)
+            .background(AppBackground())
             .navigationTitle("书源")
             .searchable(text: $searchText, prompt: "搜索书源名称 / 网址")
             .toolbar {
@@ -152,7 +152,7 @@ struct BookSourceView: View {
                 Text("已启用 \(repo.enabledSources.count) / 共 \(repo.sources.count) 个书源")
             }
         }
-        .listStyle(.insetGrouped)
+        .listStyle(.plain)
         .scrollContentBackground(.hidden)
     }
 

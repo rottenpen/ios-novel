@@ -42,7 +42,7 @@ struct BookshelfView: View {
                     listContent
                 }
             }
-            .background(DS.canvas)
+            .background(AppBackground())
             .navigationTitle("书架")
             .searchable(text: $searchText, prompt: "筛选书架")
             .toolbar {
@@ -202,6 +202,7 @@ struct BookshelfView: View {
             }
         }
         .listStyle(.plain)
+        .scrollContentBackground(.hidden)
         .refreshable { await refreshAll() }
     }
 

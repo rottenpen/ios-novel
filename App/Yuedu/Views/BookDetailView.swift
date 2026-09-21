@@ -49,7 +49,7 @@ struct BookDetailView: View {
             }
             .padding(DS.Spacing.lg)
         }
-        .background(DS.canvas)
+        .background(AppBackground())
         .navigationTitle(detail.name)
         .navigationBarTitleDisplayMode(.inline)
         .toolbar {
@@ -196,28 +196,56 @@ struct BookDetailView: View {
     // MARK: - 操作按钮
 
     private var actionButtons: some View {
-        HStack(spacing: DS.Spacing.md) {
-            Button {
-                startReading()
-            } label: {
-                Label(continueTitle, systemImage: "book")
-                    .frame(maxWidth: .infinity)
-            }
-            .buttonStyle(.borderedProminent)
-            .tint(DS.accent)
-            .disabled(chapters.isEmpty)
+        VStack(spacing: DS.Spacing.md) {
+            HStack(spacing: DS.Spacing.md) {
+                Button {
+                    startReading()
+                } label: {
+                    Label(continueTitle, systemImage: "book")
+                        .frame(maxWidth: .infinity)
+                }
+                .buttonStyle(.borderedProminent)
+                .tint(DS.accent)
+                .disabled(chapters.isEmpty)
 
+                Button {
+                    toggleShelf()
+                } label: {
+                    Label(
+                        inShelf ? "已在书架" : "加入书架",
+                        systemImage: inShelf ? "checkmark" : "plus"
+                    )
+                    .frame(maxWidth: .infinity)
+                }
+                .buttonStyle(.bordered)
+                .tint(inShelf ? .secondary : DS.accent)
+            }
+
+            // 整本下载：核心功能提到主操作区，一眼可见、状态自适应
             Button {
-                toggleShelf()
+                if isDownloadingThis {
+                    downloader.cancel()
+                } else {
+                    startDownload()
+                }
             } label: {
-                Label(
-                    inShelf ? "已在书架" : "加入书架",
-                    systemImage: inShelf ? "checkmark" : "plus"
-                )
+                Label {
+                    if isDownloadingThis {
+                        let p = downloader.progress
+                        Text("下载中 \(p.handled)/\(p.total) · 点击停止")
+                    } else {
+                        Text(downloadTitle)
+                    }
+                } icon: {
+                    Image(systemName: isDownloadingThis ? "stop.circle" : "arrow.down.circle")
+                }
                 .frame(maxWidth: .infinity)
             }
             .buttonStyle(.bordered)
-            .tint(inShelf ? .secondary : DS.accent)
+            .tint(isDownloadingThis ? .secondary : DS.accent)
+            .disabled(chapters.isEmpty || source == nil
+                      || (!isDownloadingThis && uncachedCount == 0)
+                      || (!isDownloadingThis && downloader.isDownloading))
         }
     }
 

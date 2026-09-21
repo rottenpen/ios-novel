@@ -35,7 +35,7 @@ struct SearchView: View {
                     resultList
                 }
             }
-            .background(DS.canvas)
+            .background(AppBackground())
             .navigationTitle("搜索")
             .searchable(text: $input, prompt: "书名 / 作者")
             .onSubmit(of: .search) { startSearch(input) }
@@ -157,6 +157,7 @@ struct SearchView: View {
             .listRowBackground(DS.card)
         }
         .listStyle(.plain)
+        .scrollContentBackground(.hidden)
     }
 
     private func resultRow(_ item: AggregatedBook) -> some View {

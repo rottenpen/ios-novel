@@ -30,6 +30,7 @@ struct ReaderView: View {
 
     @EnvironmentObject private var shelf: BookshelfRepository
     @EnvironmentObject private var sourceRepo: BookSourceRepository
+    @EnvironmentObject private var downloader: DownloadManager
     @Environment(\.dismiss) private var dismiss
     @Environment(\.scenePhase) private var scenePhase
     @Environment(\.accessibilityReduceMotion) private var reduceMotion
@@ -234,6 +235,30 @@ struct ReaderView: View {
             }
     }
 
+    // MARK: - 整本下载（阅读页入口）
+
+    private var downloadingThis: Bool {
+        downloader.isDownloading(bookUrl: book.bookUrl)
+    }
+
+    private func toggleDownload() {
+        if downloadingThis {
+            downloader.cancel()
+            return
+        }
+        guard downloader.isDownloading == false else {
+            reader.message = "已有下载任务在进行，请稍后再试"
+            return
+        }
+        guard let source = sourceRepo.source(for: book.origin) else {
+            reader.message = "找不到对应书源，无法下载"
+            return
+        }
+        guard !chapters.isEmpty else { return }
+        downloader.start(book: book, chapters: chapters, source: source, shelf: shelf)
+        reader.message = "开始下载整本，可在书架查看进度"
+    }
+
     private func turn(_ direction: Int) {
         resetDrag()
         var transaction = Transaction()
@@ -297,6 +322,11 @@ struct ReaderView: View {
                     .font(.subheadline.weight(.medium))
                     .lineLimit(1)
                 Spacer()
+                Button { toggleDownload() } label: {
+                    Image(systemName: downloadingThis ? "stop.circle.fill" : "arrow.down.circle")
+                        .foregroundStyle(downloadingThis ? DS.highlight : DS.accent)
+                }
+                .accessibilityLabel(downloadingThis ? "停止下载" : "下载整本")
                 Button { showSourceSwitch = true } label: {
                     Label("换源", systemImage: "arrow.triangle.swap")
                         .font(.subheadline)
@@ -326,14 +356,29 @@ struct ReaderView: View {
                         .monospacedDigit()
                         .foregroundStyle(.secondary)
                 }
-                Slider(
-                    value: Binding(
-                        get: { Double(currentIndex) },
-                        set: { goTo(Int($0.rounded())) }
-                    ),
-                    in: 0...Double(max(0, chapters.count - 1)),
-                    step: 1
-                )
+                HStack(spacing: DS.Spacing.md) {
+                    Button { goTo(currentIndex - 1) } label: {
+                        Image(systemName: "chevron.left")
+                    }
+                    .disabled(currentIndex <= 0)
+                    .accessibilityLabel("上一章")
+
+                    Slider(
+                        value: Binding(
+                            get: { Double(currentIndex) },
+                            set: { goTo(Int($0.rounded())) }
+                        ),
+                        in: 0...Double(max(0, chapters.count - 1)),
+                        step: 1
+                    )
+                    .tint(DS.accent)
+
+                    Button { goTo(currentIndex + 1) } label: {
+                        Image(systemName: "chevron.right")
+                    }
+                    .disabled(currentIndex >= chapters.count - 1)
+                    .accessibilityLabel("下一章")
+                }
                 .tint(DS.accent)
             }
             .padding(.horizontal, DS.Spacing.lg)

@@ -92,16 +92,13 @@ extension Color {
 
 // MARK: - 通用修饰器
 
-/// 卡片容器样式
+/// 卡片容器样式（统一毛玻璃质感）。
+/// 全 App 的 .cardStyle() 调用共用此实现，与发现页的玻璃卡观感一致。
 struct CardStyle: ViewModifier {
     var padding: CGFloat = DS.Spacing.md
 
     func body(content: Content) -> some View {
-        content
-            .padding(padding)
-            .background(DS.card)
-            .clipShape(RoundedRectangle(cornerRadius: DS.Radius.lg, style: .continuous))
-            .shadow(color: .black.opacity(0.05), radius: 8, x: 0, y: 2)
+        content.modifier(GlassCardStyle(padding: padding))
     }
 }
 
@@ -143,8 +140,8 @@ struct GlassCardStyle: ViewModifier {
     }
 }
 
-/// 发现页用的清透渐变背景，衬托毛玻璃轻质感。
-struct DiscoverBackground: View {
+/// 全 App 通用的清透渐变背景，衬托毛玻璃卡片的轻质感。
+struct AppBackground: View {
     var body: some View {
         LinearGradient(
             colors: [
@@ -157,6 +154,9 @@ struct DiscoverBackground: View {
         .ignoresSafeArea()
     }
 }
+
+/// 兼容旧名：发现页曾用 DiscoverBackground，现统一为 AppBackground。
+typealias DiscoverBackground = AppBackground
 
 extension View {
     func cardStyle(padding: CGFloat = DS.Spacing.md) -> some View {
