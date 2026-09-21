@@ -17,9 +17,12 @@ struct TextPageView: UIViewRepresentable {
     }
 
     func updateUIView(_ view: PageCanvas, context: Context) {
+        let textColor = UIColor(color)
+        // 拖动只改变页面的位置；正文、页码和颜色没变时无需重新排版绘制。
+        guard view.pagination !== pagination || view.page != page || view.textColor != textColor else { return }
         view.pagination = pagination
         view.page = page
-        view.textColor = UIColor(color)
+        view.textColor = textColor
         view.setNeedsDisplay()
     }
 }
