@@ -45,7 +45,11 @@ struct ReaderView: View {
     @State private var showSettings = false
     @State private var showCatalog = false
     @State private var showSourceSwitch = false
-    @State private var forward = true
+    @GestureState private var dragTranslation: CGSize = .zero
+    @State private var settlingOffset: Double?
+    @State private var settlingID = UUID()
+    @State private var showCopyActions = false
+    @State private var copyText = ""
 
     private var currentIndex: Int { reader.chapterIndex }
     private var theme: ReadTheme { ReadTheme.theme(for: themeId) }
@@ -100,6 +104,7 @@ struct ReaderView: View {
                 if showControls { controlOverlay }
             }
             .task(id: layout) {
+                resetDrag()
                 startSession()
                 reader.configure(layout)
             }
@@ -107,13 +112,18 @@ struct ReaderView: View {
         .statusBarHidden(true)
         .onAppear { UIApplication.shared.isIdleTimerDisabled = keepScreenOn }
         .onDisappear {
+            resetDrag()
             UIApplication.shared.isIdleTimerDisabled = false
             reader.stop()
             shelf.flush()
         }
         .onChange(of: scenePhase) { _, phase in
             UIApplication.shared.isIdleTimerDisabled = phase == .active && keepScreenOn
-            if phase != .active { shelf.flush() }
+            if phase != .active { resetDrag(); shelf.flush() }
+        }
+        .onChange(of: reader.pagination.map(ObjectIdentifier.init)) { _, _ in resetDrag() }
+        .confirmationDialog("正文操作", isPresented: $showCopyActions, titleVisibility: .hidden) {
+            Button("复制本页正文") { UIPasteboard.general.string = copyText }
         }
         .sheet(isPresented: $showSettings) { settingsSheet }
         .sheet(isPresented: $showCatalog) { catalogSheet }
@@ -145,7 +155,7 @@ struct ReaderView: View {
                     Button("换源") { showSourceSwitch = true }.buttonStyle(.bordered)
                 }
             } else if let pages = reader.pagination {
-                renderedPage(pages)
+                renderedPage(pages, layout: layout)
             }
         }
         .frame(maxWidth: .infinity, maxHeight: .infinity)
@@ -153,41 +163,60 @@ struct ReaderView: View {
         .clipped()
         .contentShape(Rectangle())
         .onTapGesture { location in
+            guard settlingOffset == nil, !showCopyActions else { return }
             if showControls { withAnimation(DS.Motion.quick) { showControls = false } }
             else if location.x < layout.width * 0.3 { turn(-1) }
             else if location.x > layout.width * 0.7 { turn(1) }
             else { withAnimation(DS.Motion.quick) { showControls = true } }
         }
-        .gesture(DragGesture(minimumDistance: 20).onEnded { value in
-            guard abs(value.translation.width) > abs(value.translation.height),
-                  abs(value.translation.width) > 35 else { return }
-            turn(value.translation.width < 0 ? 1 : -1)
-        })
+        .gesture(DragGesture(minimumDistance: 8)
+            .updating($dragTranslation) { value, translation, transaction in
+                guard settlingOffset == nil, !showCopyActions, !showControls,
+                      !reader.isLoading, reader.pagination != nil else { return }
+                transaction.animation = nil
+                translation = value.translation
+            }
+            .onEnded { value in finishDrag(value.translation, layout: layout) })
+        // 同时识别，不让点击和拖动等待系统 contextMenu 的长按判定。
+        .simultaneousGesture(LongPressGesture(minimumDuration: 0.45, maximumDistance: 8)
+            .onEnded { _ in
+                guard settlingOffset == nil, !showControls,
+                      let pages = reader.pagination else { return }
+                copyText = pages.text(at: reader.pageIndex)
+                showCopyActions = true
+            })
     }
 
     @ViewBuilder
-    private func pageContent(_ pages: TextPagination) -> some View {
+    private func pageContent(_ pages: TextPagination, page: Int) -> some View {
         if pages.text.isEmpty {
             Text("本章暂无正文").foregroundStyle(theme.text.opacity(0.6))
         } else {
-            TextPageView(pagination: pages, page: reader.pageIndex, color: theme.text)
+            TextPageView(pagination: pages, page: page, color: theme.text)
         }
     }
 
-    private var pageTransition: AnyTransition {
-        if reduceMotion { return .opacity }
-        return .asymmetric(
-            insertion: .move(edge: forward ? .trailing : .leading),
-            removal: .move(edge: forward ? .leading : .trailing)
-        )
-    }
-
-    private func renderedPage(_ pages: TextPagination) -> some View {
+    private func renderedPage(_ pages: TextPagination, layout: PageLayout) -> some View {
         let pageNumber = reader.pageIndex
         let label = pages.text.isEmpty ? "本章暂无正文" : pages.text(at: pageNumber)
-        let visual = pageContent(pages)
-            .id("\(currentIndex)-\(pageNumber)")
-            .transition(pageTransition)
+        let offset = reduceMotion ? 0 : settlingOffset ?? PageTurnGesture.offset(
+            horizontal: dragTranslation.width, vertical: dragTranslation.height, width: layout.width)
+        let visual = ZStack {
+            ForEach(-1...1, id: \.self) { relative in
+                Group {
+                    if pages.ranges.indices.contains(pageNumber + relative) {
+                        pageContent(pages, page: pageNumber + relative)
+                    } else {
+                        Text(relative < 0 ? "上一章" : "下一章")
+                            .font(.caption).foregroundStyle(theme.text.opacity(0.6))
+                    }
+                }
+                .frame(width: layout.width, height: layout.height)
+                .background(theme.background)
+                .offset(x: Double(relative) * layout.width + offset)
+                .accessibilityHidden(relative != 0)
+            }
+        }
         let accessible = visual
             .accessibilityElement(children: .ignore)
             .accessibilityLabel(Text(label))
@@ -200,18 +229,59 @@ struct ReaderView: View {
                 if edge == Edge.trailing { turn(1) }
                 if edge == Edge.leading { turn(-1) }
             }
-            .contextMenu {
-                Button {
-                    UIPasteboard.general.string = pages.text(at: pageNumber)
-                } label: {
-                    Label("复制本页正文", systemImage: "doc.on.doc")
-                }
+            .accessibilityAction(named: Text("复制本页正文")) {
+                UIPasteboard.general.string = pages.text(at: pageNumber)
             }
     }
 
     private func turn(_ direction: Int) {
-        forward = direction > 0
-        withAnimation(reduceMotion ? nil : .easeOut(duration: 0.2)) { reader.turn(direction) }
+        resetDrag()
+        var transaction = Transaction()
+        transaction.disablesAnimations = true
+        withTransaction(transaction) { reader.turn(direction) }
+    }
+
+    private func resetDrag() {
+        var transaction = Transaction()
+        transaction.disablesAnimations = true
+        withTransaction(transaction) {
+            settlingID = UUID()
+            settlingOffset = nil
+        }
+    }
+
+    private func finishDrag(_ translation: CGSize, layout: PageLayout) {
+        guard settlingOffset == nil, !showCopyActions, !showControls,
+              !reader.isLoading, let pages = reader.pagination else { return }
+        var direction = PageTurnGesture.direction(horizontal: translation.width, vertical: translation.height)
+        if reduceMotion {
+            if direction != 0 { turn(direction) }
+            return
+        }
+        // 全书边界只回弹；章内展示已分页的相邻页，跨章仍交给 ReadingSession 加载。
+        if direction != 0, !pages.ranges.indices.contains(reader.pageIndex + direction),
+           !chapters.indices.contains(currentIndex + direction) {
+            reader.turn(direction)
+            direction = 0
+        }
+        let offset = PageTurnGesture.offset(horizontal: translation.width, vertical: translation.height, width: layout.width)
+        guard offset != 0 else { return }
+        let id = UUID()
+        settlingID = id
+        settlingOffset = offset
+        let chapter = currentIndex
+        let page = reader.pageIndex
+        // 手指离开后仅补完剩余位移；点击翻页不经过此动画。
+        withAnimation(.easeOut(duration: 0.1), completionCriteria: .removed) {
+            settlingOffset = direction == 0 ? 0 : -Double(direction) * layout.width
+        } completion: {
+            guard settlingID == id else { return }
+            if reader.pagination === pages, currentIndex == chapter, reader.pageIndex == page, direction != 0 {
+                turn(direction)
+            } else {
+                resetDrag()
+            }
+        }
     }
 
     // MARK: - 控制层
