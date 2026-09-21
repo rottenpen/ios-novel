@@ -43,6 +43,7 @@ struct BookSourceView: View {
             }
             .background(AppBackground())
             .navigationTitle("书源")
+            .navigationBarTitleDisplayMode(.inline)
             .searchable(text: $searchText, prompt: "搜索书源名称 / 网址")
             .toolbar {
                 ToolbarItem(placement: .topBarTrailing) {
