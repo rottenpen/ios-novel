@@ -38,6 +38,28 @@ public struct ShelfBook: Codable, Sendable, Identifiable, Hashable {
     }
 }
 
+/// 书签：记录章节索引 + 章内文字偏移，复用阅读锚点体系，可精确回跳。
+public struct Bookmark: Codable, Sendable, Identifiable, Hashable {
+    public var id: String
+    public var chapterIndex: Int
+    public var chapterTitle: String
+    /// 章内正文 UTF-16 偏移，与 durChapterPos 同一体系
+    public var position: Int
+    /// 该处正文摘录，便于列表识别
+    public var excerpt: String
+    public var createdAt: Date
+
+    public init(id: String, chapterIndex: Int, chapterTitle: String,
+                position: Int, excerpt: String, createdAt: Date) {
+        self.id = id
+        self.chapterIndex = chapterIndex
+        self.chapterTitle = chapterTitle
+        self.position = position
+        self.excerpt = excerpt
+        self.createdAt = createdAt
+    }
+}
+
 /// 书架仓库：书籍、章节目录、正文缓存与阅读进度的持久化。
 ///
 /// 存储分层：
@@ -319,6 +341,7 @@ public final class BookshelfRepository: ObservableObject {
 
     /// 清理指定书籍的全部缓存
     public func clearCache(for bookUrl: String) {
+        // 注意：只清正文与目录缓存，保留书签（bm_）
         let prefix = "c_\(Self.hash(bookUrl))_"
         let tocName = "toc_\(Self.hash(bookUrl)).json"
         let dir = cacheDirectory
@@ -361,6 +384,55 @@ public final class BookshelfRepository: ObservableObject {
             for name in items {
                 try? fm.removeItem(at: dir.appendingPathComponent(name))
             }
+        }
+    }
+
+    // MARK: - 书签
+
+    private func bookmarkURL(for bookUrl: String) -> URL {
+        cacheDirectory.appendingPathComponent("bm_\(Self.hash(bookUrl)).json")
+    }
+
+    public func bookmarks(for bookUrl: String) -> [Bookmark] {
+        flush()
+        guard let data = try? Data(contentsOf: bookmarkURL(for: bookUrl)),
+              let list = try? JSONDecoder().decode([Bookmark].self, from: data) else {
+            return []
+        }
+        return list.sorted { $0.createdAt > $1.createdAt }
+    }
+
+    /// 添加书签；同一章节同一偏移视为同一处，重复添加不产生多条。
+    @discardableResult
+    public func addBookmark(bookUrl: String, chapterIndex: Int, chapterTitle: String,
+                            position: Int, excerpt: String) -> Bookmark {
+        var list = bookmarks(for: bookUrl)
+        if let existing = list.first(where: { $0.chapterIndex == chapterIndex && $0.position == position }) {
+            return existing
+        }
+        let bm = Bookmark(id: UUID().uuidString, chapterIndex: chapterIndex,
+                          chapterTitle: chapterTitle, position: position,
+                          excerpt: String(excerpt.prefix(60)), createdAt: Date())
+        list.insert(bm, at: 0)
+        persistBookmarks(list, for: bookUrl)
+        return bm
+    }
+
+    public func removeBookmark(bookUrl: String, id: String) {
+        let list = bookmarks(for: bookUrl).filter { $0.id != id }
+        persistBookmarks(list, for: bookUrl)
+    }
+
+    /// 当前章节+偏移是否已存在书签
+    public func hasBookmark(bookUrl: String, chapterIndex: Int, position: Int) -> Bool {
+        bookmarks(for: bookUrl).contains { $0.chapterIndex == chapterIndex && $0.position == position }
+    }
+
+    private func persistBookmarks(_ list: [Bookmark], for bookUrl: String) {
+        let url = bookmarkURL(for: bookUrl)
+        queue.async {
+            guard let data = try? JSONEncoder().encode(list) else { return }
+            try? data.write(to: url, options: .atomic)
         }
     }
 

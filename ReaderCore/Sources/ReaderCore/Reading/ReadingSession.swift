@@ -14,6 +14,8 @@ public final class ReadingSession: ObservableObject {
 
     private let chapterCount: Int
     private var layout: PageLayout?
+    /// 各章图片锚点（offset→URL），由 App 层解析 `<img>` 后注入
+    private var anchorsByChapter: [Int: [ImageAnchor]] = [:]
     private var loader: (@MainActor (Int) async throws -> String)?
     private var progress: (@MainActor (Int, Int) -> Void)?
     private var generation = UUID()
@@ -37,6 +39,16 @@ public final class ReadingSession: ObservableObject {
         progress = onProgress
     }
 
+    /// 注入某章正文的图片锚点（在 loader 返回该章正文前调用）。
+    public func setImageAnchors(_ anchors: [ImageAnchor], forChapter index: Int) {
+        anchorsByChapter[index] = anchors
+    }
+
+    /// 当前章图片锚点（滚动模式分段渲染用）。
+    public func currentImageAnchors() -> [ImageAnchor] {
+        anchorsByChapter[chapterIndex] ?? []
+    }
+
     public func configure(_ value: PageLayout) {
         guard layout != value || pagination == nil else { return }
         layout = value
@@ -46,6 +58,20 @@ public final class ReadingSession: ObservableObject {
     public func goToChapter(_ index: Int) {
         guard (0..<chapterCount).contains(index) else { return }
         show(chapter: index, offset: 0)
+    }
+
+    /// 跳到指定章节的章内文字偏移（用于书签回跳）。
+    public func goToChapter(_ index: Int, offset: Int) {
+        guard (0..<chapterCount).contains(index) else { return }
+        show(chapter: index, offset: max(0, offset))
+    }
+
+    /// 滚动模式下的轻量进度上报：只更新锚点与书架进度，不触发重排。
+    public func markProgress(offset: Int) {
+        let length = (pagination?.text as NSString?)?.length ?? 0
+        let clamped = min(max(0, offset), max(0, length - 1))
+        anchor = clamped
+        progress?(chapterIndex, anchor)
     }
 
     public func retry() { show(chapter: chapterIndex, offset: anchor) }
@@ -92,8 +118,9 @@ public final class ReadingSession: ObservableObject {
             do {
                 let text = try await content(at: chapter)
                 try Task.checkCancellation()
+                let images = anchorsByChapter[chapter] ?? []
                 let calculation = Task.detached(priority: .userInitiated) {
-                    try TextPagination(text: text, layout: layout)
+                    try TextPagination(text: text, layout: layout, images: images)
                 }
                 let pages = try await withTaskCancellationHandler {
                     try await calculation.value

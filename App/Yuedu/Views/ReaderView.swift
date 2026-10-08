@@ -22,6 +22,20 @@ struct ReadTheme: Identifiable, Hashable {
     }
 }
 
+/// 阅读正文可选字体（iOS 自带中文字体）。
+struct ReaderFont: Identifiable {
+    let name: String
+    let postScript: String
+    var id: String { postScript }
+
+    static let all: [ReaderFont] = [
+        .init(name: "宋体", postScript: "Songti SC"),
+        .init(name: "苹方", postScript: "PingFang SC"),
+        .init(name: "楷体", postScript: "Kaiti SC"),
+        .init(name: "黑体", postScript: "Heiti SC")
+    ]
+}
+
 /// 按屏幕逐页阅读，保留章内文字位置并支持跨章翻页。
 struct ReaderView: View {
     let book: Book
@@ -40,8 +54,16 @@ struct ReaderView: View {
     @AppStorage("reader.lineSpacing") private var lineSpacing: Double = 9
     @AppStorage("reader.pageMargin") private var pageMargin: Double = 20
     @AppStorage("reader.keepScreenOn") private var keepScreenOn = true
+    @AppStorage("reader.fontName") private var fontName = "Songti SC"
+    /// 阅读页内亮度覆盖，0 = 不变暗，最多压暗到 0.55
+    @AppStorage("reader.dim") private var dim: Double = 0
+    /// 阅读模式：false = 翻页，true = 上下滚动
+    @AppStorage("reader.scrollMode") private var scrollMode = false
+    @State private var showBookmarks = false
+    @State private var bookmarkList: [Bookmark] = []
 
     @StateObject private var reader: ReadingSession
+    @StateObject private var imageStore = ImageStore()
     @State private var showControls = false
     @State private var showSettings = false
     @State private var showCatalog = false
@@ -51,8 +73,23 @@ struct ReaderView: View {
     @State private var settlingID = UUID()
     @State private var showCopyActions = false
     @State private var copyText = ""
+    /// 滚动模式阅读进度（0~1）
+    @State private var scrollProgress: Double = 0
+    /// 阅读统计：本次会话开始时间
+    @State private var sessionStart = Date()
+    /// 阅读统计：本次会话浏览过的章节（去重）
+    @State private var visitedChapters = Set<Int>()
 
     private var currentIndex: Int { reader.chapterIndex }
+
+    /// 结算本次阅读会话：时长 >= 3 秒才记账，防误触抖动
+    private func settleSession() {
+        let elapsed = Int(Date().timeIntervalSince(sessionStart))
+        guard elapsed >= 3 else { return }
+        ReadingStatsStore.shared.recordReading(seconds: elapsed, chapters: visitedChapters.count)
+        visitedChapters.removeAll()
+    }
+
     private var theme: ReadTheme { ReadTheme.theme(for: themeId) }
 
     init(book: Book, chapters: [BookChapter], startIndex: Int, startPosition: Int = 0,
@@ -71,7 +108,8 @@ struct ReaderView: View {
             let layout = PageLayout(
                 width: max(1, geometry.size.width - margin * 2),
                 height: max(1, geometry.size.height - 84),
-                fontSize: min(30, max(14, fontSize)), lineSpacing: min(20, max(2, lineSpacing))
+                fontSize: min(30, max(14, fontSize)), lineSpacing: min(20, max(2, lineSpacing)),
+                fontName: fontName
             )
             ZStack {
                 theme.background.ignoresSafeArea()
@@ -82,16 +120,24 @@ struct ReaderView: View {
                         .frame(height: 20)
                         // 与正文左边缘对齐，不再居中
                         .frame(maxWidth: .infinity, alignment: .leading)
-                    page(layout: layout)
-                        .frame(width: layout.width, height: layout.height)
+                    if scrollMode {
+                        scrollReader(layout: layout)
+                            .frame(width: layout.width, height: layout.height)
+                    } else {
+                        page(layout: layout)
+                            .frame(width: layout.width, height: layout.height)
+                    }
                     HStack {
                         // 目录位置，不写成"第 N 章"：书源目录含卷末感言等非正文条目，
                         // 位置序号与标题里的作品章号本就不同，并列显示会被误读为错位。
                         Text("\(currentIndex + 1) / \(chapters.count)")
                         Spacer()
-                        if let pages = reader.pagination {
+                        if scrollMode {
+                            Text("已读 \(Int(scrollProgress * 100))%")
+                        } else if let pages = reader.pagination {
                             Text("\(reader.pageIndex + 1) / \(pages.ranges.count) 页")
                         }
+                        ReaderBattery()
                     }
                     // 时钟独立居中，不受两侧文字宽度变化影响
                     .overlay {
@@ -102,8 +148,16 @@ struct ReaderView: View {
                     .foregroundStyle(theme.text.opacity(0.6)).frame(height: 16)
                 }
                 .padding(.horizontal, margin).padding(.vertical, 12)
+                // 阅读页调光：纯黑覆盖层压暗，不影响点击（allowsHitTesting false）
+                if dim > 0 {
+                    Color.black.opacity(min(0.55, max(0, dim)))
+                        .ignoresSafeArea()
+                        .allowsHitTesting(false)
+                }
                 if showControls { controlOverlay }
             }
+            // 主题切换时正文/背景颜色平滑渐变
+            .animation(DS.Motion.gentle, value: theme.id)
             .task(id: layout) {
                 resetDrag()
                 startSession()
@@ -111,23 +165,43 @@ struct ReaderView: View {
             }
         }
         .statusBarHidden(true)
-        .onAppear { UIApplication.shared.isIdleTimerDisabled = keepScreenOn }
+        .onAppear {
+            UIApplication.shared.isIdleTimerDisabled = keepScreenOn
+            sessionStart = Date()
+            visitedChapters.insert(currentIndex)
+        }
         .onDisappear {
             resetDrag()
             UIApplication.shared.isIdleTimerDisabled = false
             reader.stop()
             shelf.flush()
+            settleSession()
         }
         .onChange(of: scenePhase) { _, phase in
             UIApplication.shared.isIdleTimerDisabled = phase == .active && keepScreenOn
-            if phase != .active { resetDrag(); shelf.flush() }
+            if phase != .active {
+                resetDrag()
+                shelf.flush()
+                settleSession()
+                sessionStart = Date()
+            }
         }
         .onChange(of: reader.pagination.map(ObjectIdentifier.init)) { _, _ in resetDrag() }
         .confirmationDialog("正文操作", isPresented: $showCopyActions, titleVisibility: .hidden) {
             Button("复制本页正文") { UIPasteboard.general.string = copyText }
+            Button("生成本页书签") { addBookmarkHere() }
+            Button("复制章节标题") {
+                UIPasteboard.general.string = chapters[safe: currentIndex]?.title ?? ""
+                reader.message = "已复制章节标题"
+            }
+            Button("复制书名") {
+                UIPasteboard.general.string = book.name
+                reader.message = "已复制书名"
+            }
         }
         .sheet(isPresented: $showSettings) { settingsSheet }
         .sheet(isPresented: $showCatalog) { catalogSheet }
+        .sheet(isPresented: $showBookmarks) { bookmarksSheet }
         .sheet(isPresented: $showSourceSwitch) {
             SourceSwitchView(book: book, chapterTitle: chapters[safe: currentIndex]?.title ?? "",
                              chapterIndex: currentIndex) { target, catalog, index, content in
@@ -144,7 +218,97 @@ struct ReaderView: View {
         .toast($reader.message)
     }
 
-    @ViewBuilder
+    // MARK: - 上下滚动阅读模式
+
+    /// 滚动位置与内容高度的流式上报（minY 相对滚动容器、总内容高）。
+    private struct ScrollMetrics: Equatable {
+        var minY: CGFloat = 0
+        var contentHeight: CGFloat = 0
+    }
+
+    private struct ScrollMetricsKey: PreferenceKey {
+        static var defaultValue = ScrollMetrics()
+        static func reduce(value: inout ScrollMetrics, nextValue: () -> ScrollMetrics) {
+            value = nextValue()
+        }
+    }
+
+    private func scrollReader(layout: PageLayout) -> some View {
+        let text = reader.pagination?.text ?? ""
+        return ScrollView {
+            LazyVStack(alignment: .leading, spacing: 12) {
+                if text.isEmpty && reader.isLoading {
+                    ProgressView().frame(maxWidth: .infinity).padding(.top, 60)
+                } else {
+                    ForEach(Array(Self.splitByImages(text, anchors: reader.currentImageAnchors()).enumerated()), id: \.offset) { _, block in
+                        switch block {
+                        case .text(let str):
+                            Text(str)
+                                .font(Font(PageLayout.font(name: fontName, size: fontSize)))
+                                .lineSpacing(lineSpacing)
+                                .foregroundStyle(theme.text)
+                                .textSelection(.enabled)
+                                .frame(maxWidth: .infinity, alignment: .leading)
+                        case .image(let url):
+                            AsyncImage(url: URL(string: url)) { phase in
+                                if let image = phase.image {
+                                    image.resizable().scaledToFit()
+                                } else {
+                                    ZStack {
+                                        theme.background.opacity(0.6)
+                                        ProgressView().controlSize(.small)
+                                    }
+                                    .frame(height: 160)
+                                }
+                            }
+                            .frame(maxWidth: .infinity)
+                            .clipShape(RoundedRectangle(cornerRadius: DS.Radius.md))
+                        }
+                    }
+                }
+                if currentIndex < chapters.count - 1 {
+                    Button {
+                        scrollProgress = 0
+                        reader.goToChapter(currentIndex + 1)
+                    } label: {
+                        Label("下一章", systemImage: "chevron.down.circle")
+                            .font(.subheadline)
+                            .frame(maxWidth: .infinity)
+                            .padding(.vertical, 14)
+                            .background(theme.background.opacity(0.7), in: RoundedRectangle(cornerRadius: DS.Radius.md))
+                    }
+                    .buttonStyle(.plain)
+                    .foregroundStyle(DS.accent)
+                    .padding(.top, 8)
+                }
+            }
+            .padding(.vertical, 12)
+            .background(GeometryReader { geo in
+                Color.clear.preference(
+                    key: ScrollMetricsKey.self,
+                    value: ScrollMetrics(minY: geo.frame(in: .named("readerScroll")).minY,
+                                         contentHeight: geo.size.height)
+                )
+            })
+        }
+        .coordinateSpace(name: "readerScroll")
+        .onPreferenceChange(ScrollMetricsKey.self) { metrics in
+            let viewport = layout.height
+            let content = max(metrics.contentHeight, viewport + 1)
+            let maxScroll = content - viewport
+            let raw = maxScroll > 0 ? -metrics.minY / maxScroll : 0
+            let clamped = min(1, max(0, raw))
+            guard abs(clamped - scrollProgress) > 0.005 else { return }
+            scrollProgress = clamped
+            let len = (text as NSString).length
+            reader.markProgress(offset: len > 0 ? Int(clamped * Double(len - 1)) : 0)
+        }
+        .onChange(of: currentIndex) { _, _ in
+            visitedChapters.insert(currentIndex)
+            scrollProgress = 0
+        }
+    }
+
     private func page(layout: PageLayout) -> some View {
         ZStack {
             if reader.isLoading {
@@ -193,7 +357,11 @@ struct ReaderView: View {
         if pages.text.isEmpty {
             Text("本章暂无正文").foregroundStyle(theme.text.opacity(0.6))
         } else {
-            TextPageView(pagination: pages, page: page, color: theme.text)
+            TextPageView(
+                pagination: pages, page: page, color: theme.text,
+                imageProvider: { [weak imageStore] url in imageStore?.image(for: url) },
+                imageVersion: imageStore.loadedCount
+            )
         }
     }
 
@@ -312,80 +480,94 @@ struct ReaderView: View {
     // MARK: - 控制层
 
     private var controlOverlay: some View {
-        VStack {
-            // 顶栏
-            HStack(spacing: DS.Spacing.lg) {
-                Button { shelf.flush(); dismiss() } label: {
-                    Image(systemName: "chevron.left")
-                }.accessibilityLabel("退出阅读")
-                Text(book.name)
-                    .font(.subheadline.weight(.medium))
+        VStack(spacing: 0) {
+            // 顶栏从顶部滑入
+            if showControls {
+                topBar
+                    .transition(.move(edge: .top).combined(with: .opacity))
+            }
+            Spacer(minLength: 0)
+            // 底栏从底部滑入
+            if showControls {
+                bottomBar
+                    .transition(.move(edge: .bottom).combined(with: .opacity))
+            }
+        }
+    }
+
+    private var topBar: some View {
+        HStack(spacing: DS.Spacing.lg) {
+            Button { shelf.flush(); dismiss() } label: {
+                Image(systemName: "chevron.left")
+            }.accessibilityLabel("退出阅读")
+            Text(book.name)
+                .font(.subheadline.weight(.medium))
+                .lineLimit(1)
+            Spacer()
+            Button { toggleDownload() } label: {
+                Image(systemName: downloadingThis ? "stop.circle.fill" : "arrow.down.circle")
+                    .foregroundStyle(downloadingThis ? DS.highlight : DS.accent)
+            }
+            .accessibilityLabel(downloadingThis ? "停止下载" : "下载整本")
+            Button { showSourceSwitch = true } label: {
+                Label("换源", systemImage: "arrow.triangle.swap")
+                    .font(.subheadline)
+            }.accessibilityIdentifier("reader.changeSource")
+            Button { showBookmarks = true } label: {
+                Image(systemName: "bookmark")
+            }.accessibilityLabel("书签")
+            Button { showCatalog = true } label: {
+                Image(systemName: "list.bullet")
+            }.accessibilityLabel("目录")
+            Button { showSettings = true } label: {
+                Image(systemName: "textformat.size")
+            }.accessibilityLabel("阅读设置")
+        }
+        .padding(.horizontal, DS.Spacing.lg)
+        .padding(.vertical, DS.Spacing.md)
+        .background(.bar)
+    }
+
+    private var bottomBar: some View {
+        VStack(spacing: DS.Spacing.sm) {
+            HStack {
+                Text(chapters[safe: currentIndex]?.title ?? "")
+                    .font(.caption)
                     .lineLimit(1)
                 Spacer()
-                Button { toggleDownload() } label: {
-                    Image(systemName: downloadingThis ? "stop.circle.fill" : "arrow.down.circle")
-                        .foregroundStyle(downloadingThis ? DS.highlight : DS.accent)
-                }
-                .accessibilityLabel(downloadingThis ? "停止下载" : "下载整本")
-                Button { showSourceSwitch = true } label: {
-                    Label("换源", systemImage: "arrow.triangle.swap")
-                        .font(.subheadline)
-                }.accessibilityIdentifier("reader.changeSource")
-                Button { showCatalog = true } label: {
-                    Image(systemName: "list.bullet")
-                }.accessibilityLabel("目录")
-                Button { showSettings = true } label: {
-                    Image(systemName: "textformat.size")
-                }.accessibilityLabel("阅读设置")
+                Text("\(currentIndex + 1)/\(chapters.count)")
+                    .font(.caption)
+                    .monospacedDigit()
+                    .foregroundStyle(.secondary)
             }
-            .padding(.horizontal, DS.Spacing.lg)
-            .padding(.vertical, DS.Spacing.md)
-            .background(.bar)
-
-            Spacer()
-
-            // 底栏：章节进度
-            VStack(spacing: DS.Spacing.sm) {
-                HStack {
-                    Text(chapters[safe: currentIndex]?.title ?? "")
-                        .font(.caption)
-                        .lineLimit(1)
-                    Spacer()
-                    Text("\(currentIndex + 1)/\(chapters.count)")
-                        .font(.caption)
-                        .monospacedDigit()
-                        .foregroundStyle(.secondary)
+            HStack(spacing: DS.Spacing.md) {
+                Button { goTo(currentIndex - 1) } label: {
+                    Image(systemName: "chevron.left")
                 }
-                HStack(spacing: DS.Spacing.md) {
-                    Button { goTo(currentIndex - 1) } label: {
-                        Image(systemName: "chevron.left")
-                    }
-                    .disabled(currentIndex <= 0)
-                    .accessibilityLabel("上一章")
+                .disabled(currentIndex <= 0)
+                .accessibilityLabel("上一章")
 
-                    Slider(
-                        value: Binding(
-                            get: { Double(currentIndex) },
-                            set: { goTo(Int($0.rounded())) }
-                        ),
-                        in: 0...Double(max(0, chapters.count - 1)),
-                        step: 1
-                    )
-                    .tint(DS.accent)
-
-                    Button { goTo(currentIndex + 1) } label: {
-                        Image(systemName: "chevron.right")
-                    }
-                    .disabled(currentIndex >= chapters.count - 1)
-                    .accessibilityLabel("下一章")
-                }
+                Slider(
+                    value: Binding(
+                        get: { Double(currentIndex) },
+                        set: { goTo(Int($0.rounded())) }
+                    ),
+                    in: 0...Double(max(0, chapters.count - 1)),
+                    step: 1
+                )
                 .tint(DS.accent)
+
+                Button { goTo(currentIndex + 1) } label: {
+                    Image(systemName: "chevron.right")
+                }
+                .disabled(currentIndex >= chapters.count - 1)
+                .accessibilityLabel("下一章")
             }
-            .padding(.horizontal, DS.Spacing.lg)
-            .padding(.vertical, DS.Spacing.md)
-            .background(.bar)
+            .tint(DS.accent)
         }
-        .transition(.opacity)
+        .padding(.horizontal, DS.Spacing.lg)
+        .padding(.vertical, DS.Spacing.md)
+        .background(.bar)
     }
 
     // MARK: - 设置面板
@@ -426,6 +608,14 @@ struct ReaderView: View {
                     }
                 }
 
+                Section("阅读模式") {
+                    Picker("阅读模式", selection: $scrollMode) {
+                        Text("翻页").tag(false)
+                        Text("上下滚动").tag(true)
+                    }
+                    .pickerStyle(.segmented)
+                }
+
                 Section("排版") {
                     stepperRow(
                         title: "字号", value: $fontSize,
@@ -439,6 +629,22 @@ struct ReaderView: View {
                         title: "边距", value: $pageMargin,
                         range: 10...44, step: 2, unit: ""
                     )
+                    Picker("字体", selection: $fontName) {
+                        ForEach(ReaderFont.all) { f in
+                            Text(f.name).tag(f.postScript)
+                        }
+                    }
+                }
+
+                Section("亮度") {
+                    HStack {
+                        Image(systemName: "sun.min")
+                            .foregroundStyle(.secondary)
+                        Slider(value: $dim, in: 0...0.55)
+                            .tint(DS.accent)
+                        Image(systemName: "moon")
+                            .foregroundStyle(.secondary)
+                    }
                 }
 
                 Section {
@@ -450,7 +656,7 @@ struct ReaderView: View {
 
                 Section("预览") {
                     Text("　　这是一段用于预览当前排版效果的示例文字，可据此调整字号与行距到最舒适的状态。")
-                        .font(.system(size: fontSize, design: .serif))
+                        .font(Font(PageLayout.font(name: fontName, size: fontSize)))
                         .lineSpacing(lineSpacing)
                         .foregroundStyle(theme.text)
                         .padding(.vertical, DS.Spacing.sm)
@@ -496,6 +702,81 @@ struct ReaderView: View {
     }
 
     // MARK: - 目录面板
+
+    // MARK: - 书签面板
+
+    private var bookmarksSheet: some View {
+        NavigationStack {
+            List {
+                Section {
+                    Button {
+                        addBookmarkHere()
+                    } label: {
+                        Label("为当前位置添加书签", systemImage: "bookmark.fill")
+                    }
+                    .disabled(currentBookmarked)
+                }
+                if bookmarkList.isEmpty {
+                    Text("还没有书签，读到想标记的地方点上面按钮即可。")
+                        .font(.caption)
+                        .foregroundStyle(.secondary)
+                } else {
+                    Section("已保存 \(bookmarkList.count) 处") {
+                        ForEach(bookmarkList) { bm in
+                            Button {
+                                reader.goToChapter(bm.chapterIndex, offset: bm.position)
+                                showBookmarks = false
+                            } label: {
+                                VStack(alignment: .leading, spacing: DS.Spacing.xxs) {
+                                    Text(bm.chapterTitle)
+                                        .font(.subheadline)
+                                        .foregroundStyle(.primary)
+                                        .lineLimit(1)
+                                    if !bm.excerpt.isEmpty {
+                                        Text(bm.excerpt)
+                                            .font(.caption)
+                                            .foregroundStyle(.secondary)
+                                            .lineLimit(2)
+                                    }
+                                }
+                            }
+                            .buttonStyle(.plain)
+                        }
+                        .onDelete { offsets in
+                            for i in offsets {
+                                shelf.removeBookmark(bookUrl: book.bookUrl, id: bookmarkList[i].id)
+                            }
+                            bookmarkList = shelf.bookmarks(for: book.bookUrl)
+                        }
+                    }
+                }
+            }
+            .navigationTitle("书签")
+            .navigationBarTitleDisplayMode(.inline)
+            .toolbar {
+                ToolbarItem(placement: .cancellationAction) {
+                    Button("关闭") { showBookmarks = false }
+                }
+            }
+            .task { bookmarkList = shelf.bookmarks(for: book.bookUrl) }
+        }
+        .presentationDetents([.medium, .large])
+    }
+
+    /// 当前章节+偏移是否已加书签
+    private var currentBookmarked: Bool {
+        shelf.hasBookmark(bookUrl: book.bookUrl, chapterIndex: currentIndex, position: reader.anchor)
+    }
+
+    private func addBookmarkHere() {
+        let title = chapters[safe: currentIndex]?.title ?? "第 \(currentIndex + 1) 章"
+        let excerpt = reader.pagination?.text(at: reader.pageIndex) ?? ""
+        shelf.addBookmark(bookUrl: book.bookUrl, chapterIndex: currentIndex,
+                          chapterTitle: title, position: reader.anchor,
+                          excerpt: excerpt.trimmingCharacters(in: .whitespacesAndNewlines))
+        bookmarkList = shelf.bookmarks(for: book.bookUrl)
+        reader.message = "已添加书签"
+    }
 
     private var catalogSheet: some View {
         NavigationStack {
@@ -548,6 +829,81 @@ struct ReaderView: View {
         reader.goToChapter(index)
     }
 
+    /// 把正文中的 `<img>` 替换为占位符 `\u{FFFC}`，返回清洗后的文本与图片锚点。
+    /// - 图片 src 以章节 URL 为基准绝对化
+    /// - 锚点 offset 是替换后文本的 UTF-16 偏移，与分页器的字符偏移一致
+    private static func parseImages(_ raw: String, baseURL: String) -> (text: String, anchors: [ImageAnchor]) {
+        // 先用 TextFormatter 绝对化 src（保留 img 标签）
+        let absolutized = TextFormatter.formatKeepImg(raw, redirectUrl: baseURL)
+        guard let regex = try? NSRegularExpression(
+            pattern: "<img[^>]*>",
+            options: [.caseInsensitive]
+        ) else { return (raw, []) }
+
+        let ns = absolutized as NSString
+        let matches = regex.matches(in: absolutized, range: NSRange(location: 0, length: ns.length))
+        guard !matches.isEmpty else { return (absolutized, []) }
+
+        var result = ""
+        var anchors: [ImageAnchor] = []
+        var cursor = 0
+        let placeholder = "\u{FFFC}" as NSString
+        for match in matches {
+            // 匹配之前的文本
+            let before = ns.substring(with: NSRange(location: cursor, length: match.range.location - cursor))
+            result += before
+            // 提取 src
+            let tag = ns.substring(with: match.range)
+            let srcRange = (tag as NSString).range(
+                of: #"src\s*=\s*"([^"]*)""#,
+                options: .regularExpression
+            )
+            var url = ""
+            if srcRange.location != NSNotFound {
+                let src = (tag as NSString).substring(with: srcRange)
+                url = src.replacingOccurrences(
+                    of: #"^src\s*=\s*"|"$"#, with: "", options: .regularExpression
+                )
+            }
+            let offset = (result as NSString).length
+            result += placeholder as String
+            if !url.isEmpty {
+                anchors.append(ImageAnchor(offset: offset, url: url))
+            }
+            cursor = match.range.location + match.range.length
+        }
+        result += ns.substring(from: cursor)
+        return (result, anchors)
+    }
+
+    /// 滚动模式：按图片锚点把正文切成文本/图片块。
+    private enum ScrollBlock {
+        case text(String)
+        case image(String)
+    }
+
+    private static func splitByImages(_ text: String, anchors: [ImageAnchor]) -> [ScrollBlock] {
+        guard !anchors.isEmpty else { return [.text(text)] }
+        let sorted = anchors.sorted { $0.offset < $1.offset }
+        let ns = text as NSString
+        var blocks: [ScrollBlock] = []
+        var cursor = 0
+        for anchor in sorted {
+            let offset = min(max(0, anchor.offset), ns.length)
+            if offset > cursor {
+                blocks.append(.text(ns.substring(with: NSRange(location: cursor, length: offset - cursor))))
+            }
+            if offset < ns.length {
+                blocks.append(.image(anchor.url))
+            }
+            cursor = min(ns.length, offset + 1)
+        }
+        if cursor < ns.length {
+            blocks.append(.text(ns.substring(from: cursor)))
+        }
+        return blocks
+    }
+
     private func startSession() {
         let repository = shelf
         let sources = sourceRepo
@@ -568,7 +924,10 @@ struct ReaderView: View {
                 try Task.checkCancellation()
                 repository.saveContent(raw, bookUrl: currentBook.bookUrl, chapterIndex: index)
             }
-            return raw.replacingOccurrences(of: "<img[^>]*>", with: "［图片］", options: .regularExpression)
+            let parsed = Self.parseImages(raw, baseURL: catalog[safe: index]?.url ?? currentBook.bookUrl)
+            reader.setImageAnchors(parsed.anchors, forChapter: index)
+            imageStore.load(urls: parsed.anchors.map(\.url))
+            return parsed.text
         }, onProgress: { index, position in
             repository.updateProgress(
                 bookUrl: currentBook.bookUrl, chapterIndex: index,
@@ -636,5 +995,51 @@ struct ReaderClock: View {
             return date.addingTimeInterval(60)
         }
         return next
+    }
+}
+
+/// 阅读页电量标识：状态栏隐藏时补回电量信息。
+/// 监听系统电量与充电状态变化；模拟器电量不可用（-1）时显示 "—"。
+struct ReaderBattery: View {
+    @State private var level: Float = -1
+    @State private var charging = false
+
+    var body: some View {
+        HStack(spacing: 4) {
+            Image(systemName: iconName)
+                .font(.caption2)
+            Text(level >= 0 ? "\(Int((level * 100).rounded()))%" : "—")
+                .font(.caption2).monospacedDigit()
+        }
+        .accessibilityElement(children: .combine)
+        .accessibilityLabel("电量 \(level >= 0 ? "\(Int((level * 100).rounded()))%" : "未知")")
+        .onAppear {
+            UIDevice.current.isBatteryMonitoringEnabled = true
+            refresh()
+        }
+        .onReceive(NotificationCenter.default.publisher(
+            for: UIDevice.batteryLevelDidChangeNotification
+        )) { _ in refresh() }
+        .onReceive(NotificationCenter.default.publisher(
+            for: UIDevice.batteryStateDidChangeNotification
+        )) { _ in refresh() }
+    }
+
+    private var iconName: String {
+        if charging { return "battery.100percent.bolt" }
+        switch level {
+        case 0.75...: return "battery.75"
+        case 0.5..<0.75: return "battery.50"
+        case 0.25..<0.5: return "battery.25"
+        case 0..<0.25: return "battery.0"
+        default: return "battery.100"
+        }
+    }
+
+    private func refresh() {
+        let device = UIDevice.current
+        charging = device.batteryState == .charging || device.batteryState == .full
+        // 模拟器返回 -1：保持未知，显示 "—"
+        level = device.batteryLevel
     }
 }

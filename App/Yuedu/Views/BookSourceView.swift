@@ -193,6 +193,16 @@ struct BookSourceView: View {
         .contentShape(Rectangle())
         .contextMenu {
             Button {
+                UIPasteboard.general.string = source.bookSourceName
+            } label: {
+                Label("复制书源名", systemImage: "doc.on.doc")
+            }
+            Button {
+                UIPasteboard.general.string = source.bookSourceUrl
+            } label: {
+                Label("复制书源URL", systemImage: "link")
+            }
+            Button {
                 debugSource = source
             } label: {
                 Label("调试此书源", systemImage: "ladybug")
