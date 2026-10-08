@@ -5,6 +5,60 @@ import ReaderCore
 ///
 /// 不用 AsyncImage 的原因：部分书源封面需要携带 Referer / UA 才能取到，
 /// 这里统一走 ReaderCore 的 HTTPClient，并做内存缓存。
+/// 通用按压缩放样式：按压轻微缩小 + 降透明度，反馈跟手。用于无系统边框的按钮/卡片。
+struct PressableScaleButtonStyle: ButtonStyle {
+    func makeBody(configuration: Configuration) -> some View {
+        configuration.label
+            .scaleEffect(configuration.isPressed ? 0.97 : 1)
+            .opacity(configuration.isPressed ? 0.85 : 1)
+            .animation(DS.Motion.quick, value: configuration.isPressed)
+    }
+}
+
+/// 实底主按钮样式：模仿 borderedProminent 的观感并加上按压反馈。
+struct PressableProminentButtonStyle: ButtonStyle {
+    var tint: Color
+    @Environment(\.isEnabled) private var isEnabled
+
+    func makeBody(configuration: Configuration) -> some View {
+        configuration.label
+            .frame(maxWidth: .infinity)
+            .padding(.vertical, 12)
+            .background(
+                RoundedRectangle(cornerRadius: DS.Radius.md, style: .continuous)
+                    .fill(tint.opacity(configuration.isPressed ? 0.82 : 1))
+            )
+            .foregroundStyle(.white)
+            .scaleEffect(configuration.isPressed ? 0.97 : 1)
+            .opacity(isEnabled ? 1 : 0.45)
+            .animation(DS.Motion.quick, value: configuration.isPressed)
+    }
+}
+
+/// 描边按钮样式：模仿 bordered 的观感并加上按压反馈。
+struct PressableBorderedButtonStyle: ButtonStyle {
+    var tint: Color
+    @Environment(\.isEnabled) private var isEnabled
+
+    func makeBody(configuration: Configuration) -> some View {
+        configuration.label
+            .frame(maxWidth: .infinity)
+            .padding(.vertical, 10)
+            .background(
+                RoundedRectangle(cornerRadius: DS.Radius.md, style: .continuous)
+                    .fill(tint.opacity(configuration.isPressed ? 0.16 : 0.07))
+            )
+            .overlay(
+                RoundedRectangle(cornerRadius: DS.Radius.md, style: .continuous)
+                    .strokeBorder(tint.opacity(0.5), lineWidth: 1)
+            )
+            .foregroundStyle(tint)
+            .scaleEffect(configuration.isPressed ? 0.97 : 1)
+            .opacity(isEnabled ? 1 : 0.4)
+            .animation(DS.Motion.quick, value: configuration.isPressed)
+    }
+}
+
 struct BookCover: View {
     let url: String?
     var width: CGFloat = DS.Cover.listWidth
@@ -21,6 +75,7 @@ struct BookCover: View {
                 Image(uiImage: image)
                     .resizable()
                     .aspectRatio(contentMode: .fill)
+                    .transition(.opacity.combined(with: .scale(scale: 0.97)))
             } else {
                 placeholder
             }
@@ -58,7 +113,7 @@ struct BookCover: View {
     private func load() async {
         guard let url, !url.isEmpty else { return }
         if let cached = CoverCache.shared.image(for: url) {
-            image = cached
+            withAnimation(DS.Motion.gentle) { image = cached }
             return
         }
         isLoading = true
@@ -68,7 +123,9 @@ struct BookCover: View {
             guard let loaded = UIImage(data: data) else { return }
             CoverCache.shared.set(loaded, for: url)
             // 校验 url 未变，避免快速滚动时错位
-            if url == self.url { image = loaded }
+            if url == self.url {
+                withAnimation(DS.Motion.gentle) { image = loaded }
+            }
         } catch {
             // 封面失败不提示，静默走占位
         }

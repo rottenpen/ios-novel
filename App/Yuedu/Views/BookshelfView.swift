@@ -13,6 +13,10 @@ struct BookshelfView: View {
     @State private var toast: String?
     @State private var isRefreshing = false
     @State private var showSettings = false
+    /// 每本书已缓存章节数快照（异步扫描，供「已缓存全本」徽标）
+    @State private var cachedCounts: [String: Int] = [:]
+    /// 阅读统计（@Observable，数据变化自动刷新）
+    @State private var stats = ReadingStatsStore.shared
 
     private var filtered: [ShelfBook] {
         guard !searchText.isEmpty else { return shelf.books }
@@ -25,7 +29,11 @@ struct BookshelfView: View {
 
     var body: some View {
         NavigationStack {
-            Group {
+            VStack(spacing: 0) {
+                if !shelf.books.isEmpty && searchText.isEmpty {
+                    statsCard
+                }
+                Group {
                 if shelf.books.isEmpty {
                     EmptyStateView(
                         icon: "books.vertical",
@@ -41,8 +49,10 @@ struct BookshelfView: View {
                 } else {
                     listContent
                 }
+                }
             }
             .background(AppBackground())
+            .task { await refreshCachedCounts() }
             .navigationTitle("书架")
             .searchable(text: $searchText, prompt: "筛选书架")
             .toolbar {
@@ -91,6 +101,10 @@ struct BookshelfView: View {
                 guard let text else { return }
                 toast = text
                 downloader.message = nil
+                Task { await refreshCachedCounts() }
+            }
+            .onChange(of: downloader.progress.completed) { _, _ in
+                Task { await refreshCachedCounts() }
             }
             .toast($toast)
         }
@@ -135,7 +149,7 @@ struct BookshelfView: View {
                     } label: {
                         gridCell(item)
                     }
-                    .buttonStyle(.plain)
+                    .buttonStyle(PressableScaleButtonStyle())
                     .contextMenu { contextMenu(for: item) }
                 }
             }
@@ -153,13 +167,22 @@ struct BookshelfView: View {
                     height: DS.Cover.gridHeight,
                     fallbackText: item.book.name
                 )
-                if item.hasUpdate {
-                    Circle()
-                        .fill(DS.highlight)
-                        .frame(width: 10, height: 10)
-                        .overlay(Circle().strokeBorder(.white, lineWidth: 1.5))
-                        .offset(x: 4, y: -4)
+                HStack(spacing: 4) {
+                    if isFullyCached(item) {
+                        Image(systemName: "checkmark.circle.fill")
+                            .font(.system(size: 9))
+                            .foregroundStyle(.green)
+                            .padding(2)
+                            .background(Circle().fill(.black.opacity(0.45)))
+                    }
+                    if item.hasUpdate {
+                        Circle()
+                            .fill(DS.highlight)
+                            .frame(width: 10, height: 10)
+                            .overlay(Circle().strokeBorder(.white, lineWidth: 1.5))
+                    }
                 }
+                .offset(x: 4, y: -4)
             }
             .overlay(alignment: .bottom) {
                 if item.progress > 0 {
@@ -167,6 +190,7 @@ struct BookshelfView: View {
                         Capsule()
                             .fill(DS.accent)
                             .frame(width: geo.size.width * item.progress, height: 3)
+                            .animation(DS.Motion.standard, value: item.progress)
                     }
                     .frame(height: 3)
                     .background(Color.black.opacity(0.15))
@@ -192,18 +216,59 @@ struct BookshelfView: View {
                 } label: {
                     listRow(item)
                 }
-                .buttonStyle(.plain)
+                .buttonStyle(PressableScaleButtonStyle())
                 .listRowBackground(DS.card)
                 .contextMenu { contextMenu(for: item) }
             }
             .onDelete { offsets in
                 let targets = offsets.map { filtered[$0].book.bookUrl }
-                for url in targets { shelf.remove(url) }
+                withAnimation(DS.Motion.standard) {
+                    for url in targets { shelf.remove(url) }
+                }
             }
         }
         .listStyle(.plain)
         .scrollContentBackground(.hidden)
         .refreshable { await refreshAll() }
+    }
+
+    // MARK: - 阅读统计卡片
+
+    private var statsCard: some View {
+        HStack(spacing: 0) {
+            statsCell(title: "今日", value: ReadingStatsStore.formatDuration(stats.todaySeconds), detail: "\(stats.todayChapters) 章")
+            statsDivider
+            statsCell(title: "连续阅读", value: "\(stats.streakDays) 天", detail: stats.streakDays > 0 ? "保持节奏" : "今天开始")
+            statsDivider
+            statsCell(title: "累计", value: ReadingStatsStore.formatDuration(stats.totalSeconds), detail: "\(stats.totalChapters) 章")
+        }
+        .padding(.vertical, DS.Spacing.md)
+        .padding(.horizontal, DS.Spacing.lg)
+        .glassCardStyle()
+        .padding(.horizontal, DS.Spacing.lg)
+        .padding(.top, DS.Spacing.sm)
+    }
+
+    private var statsDivider: some View {
+        Rectangle()
+            .fill(DS.separator)
+            .frame(width: 1, height: 36)
+            .padding(.horizontal, DS.Spacing.lg)
+    }
+
+    private func statsCell(title: String, value: String, detail: String) -> some View {
+        VStack(alignment: .leading, spacing: 2) {
+            Text(title)
+                .font(.caption2)
+                .foregroundStyle(.tertiary)
+            Text(value)
+                .font(.subheadline.weight(.semibold))
+                .monospacedDigit()
+            Text(detail)
+                .font(.caption2)
+                .foregroundStyle(.secondary)
+        }
+        .frame(maxWidth: .infinity, alignment: .leading)
     }
 
     private func listRow(_ item: ShelfBook) -> some View {
@@ -217,6 +282,9 @@ struct BookshelfView: View {
                     Text(item.book.name)
                         .font(.subheadline.weight(.medium))
                         .lineLimit(1)
+                    if isFullyCached(item) {
+                        Text("已缓存").chipStyle(color: .green)
+                    }
                     if item.hasUpdate {
                         Text("更新").chipStyle(color: DS.highlight)
                     }
@@ -243,6 +311,7 @@ struct BookshelfView: View {
                         ProgressView(value: item.progress)
                             .tint(DS.accent)
                             .frame(maxWidth: 120)
+                            .animation(DS.Motion.standard, value: item.progress)
                         Text("\(Int(item.progress * 100))%")
                             .font(.caption2)
                             .foregroundStyle(.secondary)
@@ -255,6 +324,23 @@ struct BookshelfView: View {
         .padding(.vertical, DS.Spacing.xs)
     }
 
+    // MARK: - 缓存状态
+
+    /// 是否整本已缓存（有目录信息且缓存数 >= 总章数）
+    private func isFullyCached(_ item: ShelfBook) -> Bool {
+        item.book.totalChapterNum > 0
+            && (cachedCounts[item.book.bookUrl] ?? 0) >= item.book.totalChapterNum
+    }
+
+    /// 异步扫描每本书的缓存章节数；进入书架、下载推进/结束、刷新目录时调用
+    private func refreshCachedCounts() async {
+        var counts: [String: Int] = [:]
+        for item in shelf.books {
+            counts[item.book.bookUrl] = shelf.cachedChapterIndexes(bookUrl: item.book.bookUrl).count
+        }
+        cachedCounts = counts
+    }
+
     // MARK: - 菜单与操作
 
     @ViewBuilder
@@ -264,11 +350,22 @@ struct BookshelfView: View {
         } label: {
             Label("查看详情", systemImage: "info.circle")
         }
+        Button {
+            UIPasteboard.general.string = item.book.name
+        } label: {
+            Label("复制书名", systemImage: "doc.on.doc")
+        }
         if downloader.isDownloading(bookUrl: item.book.bookUrl) {
             Button(role: .destructive) {
                 downloader.cancel()
             } label: {
                 Label("停止下载", systemImage: "stop.circle")
+            }
+        } else if isFullyCached(item) {
+            Button {
+                toast = "本书已整本缓存"
+            } label: {
+                Label("已缓存全本", systemImage: "checkmark.circle")
             }
         } else {
             Button {
@@ -286,7 +383,7 @@ struct BookshelfView: View {
             }
         }
         Button(role: .destructive) {
-            shelf.remove(item.book.bookUrl)
+            withAnimation(DS.Motion.standard) { shelf.remove(item.book.bookUrl) }
             toast = "已从书架移除"
         } label: {
             Label("移出书架", systemImage: "trash")

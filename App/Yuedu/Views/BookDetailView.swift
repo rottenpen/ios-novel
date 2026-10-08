@@ -189,6 +189,32 @@ struct BookDetailView: View {
                     ProgressView().controlSize(.small)
                 }
             }
+            .contextMenu {
+                Button {
+                    UIPasteboard.general.string = detail.name
+                } label: {
+                    Label("复制书名", systemImage: "doc.on.doc")
+                }
+                if !detail.author.isEmpty {
+                    Button {
+                        UIPasteboard.general.string = detail.author
+                    } label: {
+                        Label("复制作者", systemImage: "person")
+                    }
+                }
+                if let intro = detail.displayIntro, !intro.isEmpty {
+                    Button {
+                        UIPasteboard.general.string = intro
+                    } label: {
+                        Label("复制简介", systemImage: "text.alignleft")
+                    }
+                }
+                Button {
+                    UIPasteboard.general.string = detail.bookUrl
+                } label: {
+                    Label("复制书籍链接", systemImage: "link")
+                }
+            }
             Spacer(minLength: 0)
         }
     }
@@ -204,8 +230,7 @@ struct BookDetailView: View {
                     Label(continueTitle, systemImage: "book")
                         .frame(maxWidth: .infinity)
                 }
-                .buttonStyle(.borderedProminent)
-                .tint(DS.accent)
+                .buttonStyle(PressableProminentButtonStyle(tint: DS.accent))
                 .disabled(chapters.isEmpty)
 
                 Button {
@@ -217,8 +242,7 @@ struct BookDetailView: View {
                     )
                     .frame(maxWidth: .infinity)
                 }
-                .buttonStyle(.bordered)
-                .tint(inShelf ? .secondary : DS.accent)
+                .buttonStyle(PressableBorderedButtonStyle(tint: inShelf ? .secondary : DS.accent))
             }
 
             // 整本下载：核心功能提到主操作区，一眼可见、状态自适应
@@ -237,12 +261,14 @@ struct BookDetailView: View {
                         Text(downloadTitle)
                     }
                 } icon: {
-                    Image(systemName: isDownloadingThis ? "stop.circle" : "arrow.down.circle")
+                    Image(systemName: isDownloadingThis ? "stop.circle"
+                          : (uncachedCount == 0 ? "checkmark.circle.fill" : "arrow.down.circle"))
                 }
                 .frame(maxWidth: .infinity)
             }
-            .buttonStyle(.bordered)
-            .tint(isDownloadingThis ? .secondary : DS.accent)
+            .buttonStyle(PressableBorderedButtonStyle(
+                tint: isDownloadingThis ? .secondary : (uncachedCount == 0 ? .green : DS.accent)
+            ))
             .disabled(chapters.isEmpty || source == nil
                       || (!isDownloadingThis && uncachedCount == 0)
                       || (!isDownloadingThis && downloader.isDownloading))
@@ -278,7 +304,7 @@ struct BookDetailView: View {
 
     private var downloadTitle: String {
         if chapters.isEmpty { return "下载全本" }
-        if uncachedCount == 0 { return "已全部缓存" }
+        if uncachedCount == 0 { return "已缓存全本" }
         if cachedCount > 0 { return "继续下载剩余 \(uncachedCount) 章" }
         return "下载全本 \(chapters.count) 章"
     }
@@ -500,18 +526,19 @@ struct BookDetailView: View {
     }
 
     private func toggleShelf() {
-        if inShelf {
-            shelf.remove(detail.bookUrl)
-            toast = "已移出书架"
-        } else {
-            var target = detail
-            target.totalChapterNum = chapters.count
-            shelf.add(target)
-            if !chapters.isEmpty {
-                shelf.saveChapters(chapters, for: target.bookUrl)
+        withAnimation(DS.Motion.standard) {
+            if inShelf {
+                shelf.remove(detail.bookUrl)
+            } else {
+                var target = detail
+                target.totalChapterNum = chapters.count
+                shelf.add(target)
+                if !chapters.isEmpty {
+                    shelf.saveChapters(chapters, for: target.bookUrl)
+                }
             }
-            toast = "已加入书架"
         }
+        toast = inShelf ? "已移出书架" : "已加入书架"
     }
 
     private func startReading(at index: Int? = nil) {
